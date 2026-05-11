@@ -2,11 +2,14 @@ using System.ComponentModel;
 using System.Diagnostics;
 using FufuLauncher.Contracts.Services;
 using FufuLauncher.Messages;
+using FufuLauncher.Models;
 using FufuLauncher.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
+using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Navigation;
 using FufuLauncher.Services.Background;
 
@@ -14,10 +17,16 @@ namespace FufuLauncher.Views;
 
 public sealed partial class MainPage : Page
 {
+    private const double BannerSwipeThreshold = 42;
+    private const double BannerAnimationMs = 460;
     private Microsoft.UI.Xaml.Media.Brush _originalInfoCardBrush;
     private Microsoft.UI.Xaml.Media.Brush _originalCheckinCardBrush;
     private DateTimeOffset _lastBackgroundSwitchTime = DateTimeOffset.MinValue;
     private static readonly TimeSpan BackgroundSwitchCooldown = TimeSpan.FromSeconds(2);
+    private BannerItem _displayedBanner;
+    private bool _isBannerTransitioning;
+    private bool _isBannerPointerPressed;
+    private Windows.Foundation.Point _bannerPointerPressedPoint;
     public MainViewModel ViewModel
     {
         get;
@@ -441,6 +450,10 @@ private async void ChangeUidButton_Click(object sender, RoutedEventArgs e)
         {
             AnimateLaunchButtonOverlay(ViewModel.IsGameRunning ? 0.0 : 1.0);
         }
+        else if (e.PropertyName == nameof(MainViewModel.CurrentBanner))
+        {
+            _ = DispatcherQueue.TryEnqueue(() => TransitionToBanner(ViewModel.CurrentBanner));
+        }
         else if (e.PropertyName == nameof(MainViewModel.IsVideoBackground))
         {
             UpdateCardBackgrounds();
@@ -485,6 +498,7 @@ private async void ChangeUidButton_Click(object sender, RoutedEventArgs e)
         }
     
         UpdateCardBackgrounds();
+        InitializeBannerDisplay();
     }
 
     private async void OpenLink(string url)
@@ -502,5 +516,210 @@ private async void ChangeUidButton_Click(object sender, RoutedEventArgs e)
                 Debug.WriteLine($"打开链接失败: {ex.Message}");
             }
         }
+    }
+
+    private void InitializeBannerDisplay()
+    {
+        if (ViewModel.Banners == null || ViewModel.Banners.Count == 0)
+        {
+            BannerCurrentImage.Source = null;
+            BannerIncomingImage.Source = null;
+            _displayedBanner = null;
+            return;
+        }
+
+        if (ViewModel.CurrentBanner == null)
+        {
+            ViewModel.CurrentBanner = ViewModel.Banners[0];
+        }
+
+        SetBannerImage(BannerCurrentImage, ViewModel.CurrentBanner);
+        _displayedBanner = ViewModel.CurrentBanner;
+        ResetBannerLayers();
+    }
+
+    private void TransitionToBanner(BannerItem targetBanner)
+    {
+        if (targetBanner == null)
+        {
+            return;
+        }
+
+        if (_displayedBanner == null || BannerCurrentImage.Source == null)
+        {
+            SetBannerImage(BannerCurrentImage, targetBanner);
+            _displayedBanner = targetBanner;
+            ResetBannerLayers();
+            return;
+        }
+
+        if (_isBannerTransitioning || ReferenceEquals(_displayedBanner, targetBanner))
+        {
+            return;
+        }
+
+        var direction = ResolveBannerDirection(_displayedBanner, targetBanner);
+        StartBannerTransition(targetBanner, direction);
+    }
+
+    private int ResolveBannerDirection(BannerItem from, BannerItem to)
+    {
+        var count = ViewModel.Banners?.Count ?? 0;
+        if (count < 2) return 1;
+
+        var fromIndex = ViewModel.Banners.IndexOf(from);
+        var toIndex = ViewModel.Banners.IndexOf(to);
+        if (fromIndex < 0 || toIndex < 0) return 1;
+
+        if ((fromIndex + 1) % count == toIndex) return 1;
+        if ((fromIndex - 1 + count) % count == toIndex) return -1;
+
+        return toIndex > fromIndex ? 1 : -1;
+    }
+
+    private void StartBannerTransition(BannerItem targetBanner, int direction)
+    {
+        var width = Math.Max(BannerViewport.ActualWidth, 1);
+        var offset = width * 0.28 * direction;
+
+        SetBannerImage(BannerIncomingImage, targetBanner);
+
+        BannerIncomingTranslate.X = -offset;
+        BannerIncomingLayer.Opacity = 0;
+        BannerIncomingScale.ScaleX = 1.035;
+        BannerIncomingScale.ScaleY = 1.035;
+        BannerCurrentTranslate.X = 0;
+        BannerCurrentLayer.Opacity = 1;
+        BannerCurrentScale.ScaleX = 1;
+        BannerCurrentScale.ScaleY = 1;
+
+        var storyboard = new Storyboard();
+        var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
+        var duration = new Duration(TimeSpan.FromMilliseconds(BannerAnimationMs));
+
+        storyboard.Children.Add(CreateDoubleAnimation(BannerCurrentTranslate, "X", offset, duration, easing));
+        storyboard.Children.Add(CreateDoubleAnimation(BannerCurrentLayer, "Opacity", 0.2, duration, easing));
+        storyboard.Children.Add(CreateDoubleAnimation(BannerCurrentScale, "ScaleX", 0.97, duration, easing));
+        storyboard.Children.Add(CreateDoubleAnimation(BannerCurrentScale, "ScaleY", 0.97, duration, easing));
+
+        storyboard.Children.Add(CreateDoubleAnimation(BannerIncomingTranslate, "X", 0, duration, easing));
+        storyboard.Children.Add(CreateDoubleAnimation(BannerIncomingLayer, "Opacity", 1, duration, easing));
+        storyboard.Children.Add(CreateDoubleAnimation(BannerIncomingScale, "ScaleX", 1, duration, easing));
+        storyboard.Children.Add(CreateDoubleAnimation(BannerIncomingScale, "ScaleY", 1, duration, easing));
+
+        _isBannerTransitioning = true;
+        storyboard.Completed += (_, _) =>
+        {
+            SwapBannerLayers(targetBanner);
+            _isBannerTransitioning = false;
+        };
+        storyboard.Begin();
+    }
+
+    private static DoubleAnimation CreateDoubleAnimation(DependencyObject target, string property, double to, Duration duration, EasingFunctionBase easing)
+    {
+        var animation = new DoubleAnimation
+        {
+            To = to,
+            Duration = duration,
+            EasingFunction = easing,
+            EnableDependentAnimation = true
+        };
+
+        Storyboard.SetTarget(animation, target);
+        Storyboard.SetTargetProperty(animation, property);
+        return animation;
+    }
+
+    private void SwapBannerLayers(BannerItem displayedBanner)
+    {
+        BannerCurrentImage.Source = BannerIncomingImage.Source;
+        BannerIncomingImage.Source = null;
+        _displayedBanner = displayedBanner;
+        ResetBannerLayers();
+    }
+
+    private void ResetBannerLayers()
+    {
+        BannerCurrentTranslate.X = 0;
+        BannerIncomingTranslate.X = 0;
+        BannerCurrentLayer.Opacity = 1;
+        BannerIncomingLayer.Opacity = 0;
+        BannerCurrentScale.ScaleX = 1;
+        BannerCurrentScale.ScaleY = 1;
+        BannerIncomingScale.ScaleX = 1;
+        BannerIncomingScale.ScaleY = 1;
+    }
+
+    private static void SetBannerImage(Image imageControl, BannerItem banner)
+    {
+        if (banner?.Image?.Url == null)
+        {
+            imageControl.Source = null;
+            return;
+        }
+
+        try
+        {
+            imageControl.Source = new BitmapImage(new Uri(banner.Image.Url));
+        }
+        catch
+        {
+            imageControl.Source = null;
+        }
+    }
+
+    private void BannerButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (!string.IsNullOrWhiteSpace(ViewModel.CurrentBanner?.Image?.Link))
+        {
+            OpenLink(ViewModel.CurrentBanner.Image.Link);
+        }
+    }
+
+    private void BannerViewport_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        _isBannerPointerPressed = true;
+        _bannerPointerPressedPoint = e.GetCurrentPoint(BannerViewport).Position;
+        BannerViewport.CapturePointer(e.Pointer);
+    }
+
+    private void BannerViewport_PointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_isBannerPointerPressed)
+        {
+            return;
+        }
+
+        var releasedPoint = e.GetCurrentPoint(BannerViewport).Position;
+        var deltaX = releasedPoint.X - _bannerPointerPressedPoint.X;
+        _isBannerPointerPressed = false;
+        BannerViewport.ReleasePointerCapture(e.Pointer);
+
+        if (Math.Abs(deltaX) >= BannerSwipeThreshold)
+        {
+            MoveBannerBy(deltaX < 0 ? 1 : -1);
+        }
+    }
+
+    private void BannerViewport_PointerCanceled(object sender, PointerRoutedEventArgs e)
+    {
+        _isBannerPointerPressed = false;
+    }
+
+    private void MoveBannerBy(int offset)
+    {
+        if (_isBannerTransitioning || ViewModel.Banners == null || ViewModel.Banners.Count < 2)
+        {
+            return;
+        }
+
+        var current = ViewModel.CurrentBanner ?? _displayedBanner ?? ViewModel.Banners[0];
+        var currentIndex = ViewModel.Banners.IndexOf(current);
+        if (currentIndex < 0) currentIndex = 0;
+
+        var count = ViewModel.Banners.Count;
+        var nextIndex = (currentIndex + offset + count) % count;
+        ViewModel.CurrentBanner = ViewModel.Banners[nextIndex];
     }
 }

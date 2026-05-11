@@ -16,6 +16,7 @@ public partial class PluginSettingsViewModel : ObservableObject
     private string _dllPath;
     private IniFile _iniFile;
     private bool _isAutoUpdatePluginEnabled;
+    private bool _useKeyListInput = true;
     
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsDownloadSupported))]
@@ -200,6 +201,10 @@ private void UpdatePaths()
             var task = localSettings.ReadSettingAsync("IsAutoUpdatePluginEnabled");
             task.Wait();
             _isAutoUpdatePluginEnabled = task.Result != null && Convert.ToBoolean(task.Result);
+
+            var keyInputTask = localSettings.ReadSettingAsync("UseKeyListInput");
+            keyInputTask.Wait();
+            _useKeyListInput = keyInputTask.Result == null || Convert.ToBoolean(keyInputTask.Result);
         }
 
         LoadConfiguration();
@@ -226,6 +231,27 @@ private void UpdatePaths()
                 if (localSettings != null)
                 {
                     _ = localSettings.SaveSettingAsync("IsAutoUpdatePluginEnabled", value);
+                }
+            }
+        }
+    }
+
+    public bool UseKeyListInput
+    {
+        get => _useKeyListInput;
+        set
+        {
+            if (SetProperty(ref _useKeyListInput, value))
+            {
+                foreach (var setting in Settings.Where(s => string.Equals(s.Type, "key", StringComparison.OrdinalIgnoreCase)))
+                {
+                    setting.SetKeyInputMode(value);
+                }
+
+                var localSettings = App.GetService<FufuLauncher.Contracts.Services.ILocalSettingsService>();
+                if (localSettings != null)
+                {
+                    _ = localSettings.SaveSettingAsync("UseKeyListInput", value);
                 }
             }
         }
@@ -283,7 +309,7 @@ private void UpdatePaths()
                 var type = dic.GetValueOrDefault("Type", "string");
                 var value = dic.GetValueOrDefault("Value", "");
 
-                var settingItem = new PluginSettingItem(_iniFile, section.Key, name, type, value, OnSettingValueChanged);
+                var settingItem = new PluginSettingItem(_iniFile, section.Key, name, type, value, OnSettingValueChanged, UseKeyListInput);
                 Settings.Add(settingItem);
             }
         }
@@ -553,6 +579,7 @@ public class PluginSettingItem : ObservableObject
 
     private string _rawValue;
     private static readonly List<VirtualKeyOption> _availableKeys = GetAvailableKeys();
+    private bool _useKeyListInput;
 
     public List<VirtualKeyOption> AvailableKeys => _availableKeys;
     
@@ -572,18 +599,20 @@ public class PluginSettingItem : ObservableObject
         get => int.TryParse(_rawValue, out var result) ? result : 0;
         set
         {
+            EnsureKeyOption(value);
             var targetValue = value.ToString();
             if (_rawValue != targetValue)
             {
                 var previousValue = _rawValue;
                 _rawValue = targetValue;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(KeyNumberValue));
                 UpdatePhysicalConfig(targetValue, previousValue, nameof(KeyValue));
             }
         }
     }
 
-    public PluginSettingItem(IniFile iniFile, string sectionKey, string displayName, string type, string value, Action<string, string, string> onValueChanged)
+    public PluginSettingItem(IniFile iniFile, string sectionKey, string displayName, string type, string value, Action<string, string, string> onValueChanged, bool useKeyListInput)
     {
         _iniFile = iniFile;
         SectionKey = sectionKey;
@@ -591,6 +620,41 @@ public class PluginSettingItem : ObservableObject
         Type = type;
         _rawValue = value;
         _onValueChanged = onValueChanged;
+        _useKeyListInput = useKeyListInput;
+        if (string.Equals(Type, "key", StringComparison.OrdinalIgnoreCase) && int.TryParse(_rawValue, out var currentKey))
+        {
+            EnsureKeyOption(currentKey);
+        }
+    }
+
+    public bool UseKeyListInput
+    {
+        get => _useKeyListInput;
+        set
+        {
+            if (SetProperty(ref _useKeyListInput, value))
+            {
+                OnPropertyChanged(nameof(KeyListVisibility));
+                OnPropertyChanged(nameof(KeyNumberVisibility));
+            }
+        }
+    }
+
+    public Microsoft.UI.Xaml.Visibility KeyListVisibility =>
+        UseKeyListInput ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+    public Microsoft.UI.Xaml.Visibility KeyNumberVisibility =>
+        UseKeyListInput ? Microsoft.UI.Xaml.Visibility.Collapsed : Microsoft.UI.Xaml.Visibility.Visible;
+
+    public double KeyNumberValue
+    {
+        get => KeyValue;
+        set => KeyValue = (int)Math.Round(value);
+    }
+
+    public void SetKeyInputMode(bool useKeyListInput)
+    {
+        UseKeyListInput = useKeyListInput;
     }
 
     public bool BoolValue
@@ -659,5 +723,17 @@ public class PluginSettingItem : ObservableObject
                 6000
             ));
         }
+    }
+
+    private static void EnsureKeyOption(int keyCode)
+    {
+        if (keyCode <= 0) return;
+        if (_availableKeys.Any(k => k.KeyCode == keyCode)) return;
+
+        _availableKeys.Add(new VirtualKeyOption
+        {
+            KeyCode = keyCode,
+            KeyName = $"Custom({keyCode})"
+        });
     }
 }

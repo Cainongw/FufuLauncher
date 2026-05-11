@@ -129,53 +129,61 @@
                     </Grid.RowDefinitions>
 
                     <Grid Grid.Row="0" Margin="0" CornerRadius="12,12,0,0" Background="#20000000">
-                        <FlipView ItemsSource="{x:Bind ViewModel.Banners, Mode=OneWay}"
-                                  SelectedItem="{x:Bind ViewModel.CurrentBanner, Mode=TwoWay}"
-                                  Padding="0"
-                                  Margin="0"
-                                  BorderThickness="0"
-                                  Background="Transparent"
-                                  UseSystemFocusVisuals="False">
-    
-                            <FlipView.ItemContainerStyle>
-                                <Style TargetType="FlipViewItem">
-                                    <Setter Property="Margin" Value="0"/>
-                                    <Setter Property="Padding" Value="0"/>
-                                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                                    <Setter Property="VerticalContentAlignment" Value="Stretch"/>
-                                    <Setter Property="BorderThickness" Value="0"/>
-                                    <Setter Property="MinWidth" Value="0"/>
-                                    <Setter Property="MinHeight" Value="0"/>
-                                </Style>
-                            </FlipView.ItemContainerStyle>
+                        <Grid x:Name="BannerViewport"
+                              Background="Transparent"
+                              PointerPressed="BannerViewport_PointerPressed"
+                              PointerReleased="BannerViewport_PointerReleased"
+                              PointerCanceled="BannerViewport_PointerCanceled"
+                              PointerExited="BannerViewport_PointerCanceled">
+                            <Grid x:Name="BannerCurrentLayer"
+                                  Opacity="1"
+                                  IsHitTestVisible="True">
+                                <Grid.RenderTransform>
+                                    <TranslateTransform x:Name="BannerCurrentTranslate" X="0"/>
+                                </Grid.RenderTransform>
+                                <Image x:Name="BannerCurrentImage"
+                                       Stretch="Fill"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       RenderTransformOrigin="0.5,0.5">
+                                    <Image.RenderTransform>
+                                        <ScaleTransform x:Name="BannerCurrentScale" ScaleX="1" ScaleY="1"/>
+                                    </Image.RenderTransform>
+                                </Image>
 
-                            <FlipView.ItemTemplate>
-                                <DataTemplate>
-                                    <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="0" Padding="0">
-                                        <Image Source="{Binding Image.Url}" 
-                                               Stretch="Fill" 
-                                               HorizontalAlignment="Center" 
-                                               VerticalAlignment="Center" />
-                
-                                        <Button Background="Transparent"
-                                                HorizontalAlignment="Stretch"
-                                                VerticalAlignment="Stretch"
-                                                Command="{Binding ElementName=MainPageRoot, Path=OpenLinkCommand}"
-                                                CommandParameter="{Binding Image.Link}"
-                                                Margin="0"
-                                                Padding="0"
-                                                BorderThickness="0">
-                                            <Button.Resources>
-                                                <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="Transparent"/>
-                                                <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="Transparent"/>
-                                                <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent"/>
-                                                <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent"/>
-                                            </Button.Resources>
-                                        </Button>
-                                    </Grid>
-                                </DataTemplate>
-                            </FlipView.ItemTemplate>
-                        </FlipView>
+                                <Button Background="Transparent"
+                                        HorizontalAlignment="Stretch"
+                                        VerticalAlignment="Stretch"
+                                        Margin="0"
+                                        Padding="0"
+                                        BorderThickness="0"
+                                        Click="BannerButton_Click">
+                                    <Button.Resources>
+                                        <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="Transparent"/>
+                                        <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="Transparent"/>
+                                        <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent"/>
+                                        <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent"/>
+                                    </Button.Resources>
+                                </Button>
+                            </Grid>
+
+                            <Grid x:Name="BannerIncomingLayer"
+                                  Opacity="0"
+                                  IsHitTestVisible="False">
+                                <Grid.RenderTransform>
+                                    <TranslateTransform x:Name="BannerIncomingTranslate" X="0"/>
+                                </Grid.RenderTransform>
+                                <Image x:Name="BannerIncomingImage"
+                                       Stretch="Fill"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       RenderTransformOrigin="0.5,0.5">
+                                    <Image.RenderTransform>
+                                        <ScaleTransform x:Name="BannerIncomingScale" ScaleX="1" ScaleY="1"/>
+                                    </Image.RenderTransform>
+                                </Image>
+                            </Grid>
+                        </Grid>
                         
                         <Button x:Name="InfoExpandButton"
                                 VerticalAlignment="Bottom" HorizontalAlignment="Right"
