@@ -188,6 +188,37 @@ public sealed partial class SettingsPage : Page
         window.Activate();
     }
 
+    private void OnOpenSecurityAuthClick(object sender, RoutedEventArgs e)
+    {
+        var authWindow = new SecurityWebWindow("", "https://fu1.fun/dev-auth");
+        
+        IntPtr hWnd = WindowNative.GetWindowHandle(authWindow);
+        var windowId = Win32Interop.GetWindowIdFromWindow(hWnd);
+        var appWindow = AppWindow.GetFromWindowId(windowId);
+
+        if (appWindow != null)
+        {
+            string iconPath = Path.Combine(AppContext.BaseDirectory, "Assets/WindowIcon.ico");
+            if (File.Exists(iconPath))
+            {
+                appWindow.SetIcon(iconPath);
+            }
+
+            var size = new Windows.Graphics.SizeInt32(1280, 720);
+            appWindow.Resize(size);
+
+            var displayArea = DisplayArea.GetFromWindowId(windowId, DisplayAreaFallback.Primary);
+            if (displayArea != null)
+            {
+                var centeredX = (displayArea.WorkArea.Width - size.Width) / 2;
+                var centeredY = (displayArea.WorkArea.Height - size.Height) / 2;
+                appWindow.Move(new Windows.Graphics.PointInt32(centeredX, centeredY));
+            }
+        }
+
+        authWindow.Activate();
+    }
+
     private void SettingsNavigationView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
         if (args.SelectedItem is NavigationViewItem selectedItem &&

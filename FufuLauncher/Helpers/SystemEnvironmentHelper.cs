@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using Microsoft.Win32;
@@ -94,6 +95,31 @@ namespace FufuLauncher.Helpers
             }
             
             return false;
+        }
+
+        public static string GetHwid()
+        {
+            try
+            {
+                using var process = new System.Diagnostics.Process();
+                process.StartInfo.FileName = "powershell.exe";
+                process.StartInfo.Arguments = "-NoProfile -Command \"Get-CimInstance Win32_DiskDrive | Select-Object -ExpandProperty SerialNumber\"";
+                process.StartInfo.RedirectStandardOutput = true;
+                process.StartInfo.UseShellExecute = false;
+                process.StartInfo.CreateNoWindow = true;
+                process.Start();
+
+                string output = process.StandardOutput.ReadToEnd();
+                process.WaitForExit();
+
+                var lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                var formatted = string.Join(" ", lines.Select(l => l.Trim()));
+                return formatted;
+            }
+            catch
+            {
+                return "Unknown";
+            }
         }
     }
 }

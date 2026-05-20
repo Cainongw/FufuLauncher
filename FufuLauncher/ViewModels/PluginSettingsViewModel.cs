@@ -148,6 +148,70 @@ public partial class PluginSettingsViewModel : ObservableObject
         }
     }
 
+    private static bool _isHwidAuthorized = false;
+    private static bool _hasCheckedHwid = false;
+
+private async Task<bool> CheckHwidAuthorizationAsync()
+    {
+        if (_hasCheckedHwid && _isHwidAuthorized) return true;
+
+        string hwid = SystemEnvironmentHelper.GetHwid();
+        
+        // 增加详细的控制台打印和文件日志，使用 [] 标记字符串边界以排查空白字符问题
+        System.Diagnostics.Debug.WriteLine($"[HWID_DEBUG] 本地获取到的 HWID: [{hwid}]");
+        System.IO.File.WriteAllText("hwid_debug.txt", $"[HWID_DEBUG] Time: {DateTime.Now}\nLocal HWID: [{hwid}]\n");
+
+        if (string.IsNullOrEmpty(hwid) || hwid == "Unknown") return false;
+
+        try
+        {
+            using var client = new System.Net.Http.HttpClient();
+            client.Timeout = TimeSpan.FromSeconds(5);
+            var content = new System.Net.Http.StringContent(
+                System.Text.Json.JsonSerializer.Serialize(new { hwid = hwid }),
+                System.Text.Encoding.UTF8,
+                "application/json"
+            );
+            
+            System.Diagnostics.Debug.WriteLine($"[HWID_DEBUG] 请求的 JSON Payload: {await content.ReadAsStringAsync()}");
+
+            var response = await client.PostAsync("https://fu1.fun/api/verify-hwid", content);
+            if (response.IsSuccessStatusCode)
+            {
+                var responseString = await response.Content.ReadAsStringAsync();
+                
+                // 打印服务器返回的完整 JSON 数据
+                System.Diagnostics.Debug.WriteLine($"[HWID_DEBUG] 服务器返回的 JSON: {responseString}");
+                System.IO.File.AppendAllText("hwid_debug.txt", $"Response JSON={responseString}\n");
+                
+                var result = System.Text.Json.JsonDocument.Parse(responseString).RootElement;
+                if (result.TryGetProperty("authorized", out var authElement) && authElement.GetBoolean())
+                {
+                    _isHwidAuthorized = true;
+                    System.Diagnostics.Debug.WriteLine("[HWID_DEBUG] 认证状态: 成功 (authorized=true)");
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("[HWID_DEBUG] 认证状态: 失败 (authorized不存在或为false)");
+                }
+            }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine($"[HWID_DEBUG] HTTP 请求失败，状态码: {response.StatusCode}");
+                System.IO.File.AppendAllText("hwid_debug.txt", $"ResponseStatusCode={response.StatusCode}\n");
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[HWID_DEBUG] 发生异常: {ex.Message}");
+            System.IO.File.AppendAllText("hwid", $"Error={ex.Message}\n");
+        }
+
+        _hasCheckedHwid = true;
+        System.Diagnostics.Debug.WriteLine($"[HWID_DEBUG] 最终返回的授权结果: {_isHwidAuthorized}");
+        return _isHwidAuthorized;
+    }
+
     public Microsoft.UI.Xaml.Visibility SettingsOverlayVisibility => 
         (SelectedPluginIndex == 0 && !_isMainPluginEnabled) || (SelectedPluginIndex == 1 && !_isFpsPluginEnabled) || (SelectedPluginIndex == 2 && !_isAvatarPluginEnabled) 
             ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
@@ -165,7 +229,7 @@ public partial class PluginSettingsViewModel : ObservableObject
         }
     }
 
-    private void CheckPluginStates()
+    private async void CheckPluginStates()
     {
         string fpsDir = Path.Combine(AppContext.BaseDirectory, "Plugins", "FPS");
         string fpsEnabledPath = Path.Combine(fpsDir, "FPS.dll");
@@ -235,6 +299,20 @@ public partial class PluginSettingsViewModel : ObservableObject
 
         bool fpsEnabled = File.Exists(fpsEnabledPath);
         bool avatarEnabled = File.Exists(avatarEnabledPath);
+
+        if (avatarEnabled)
+        {
+            bool isAuthorized = await CheckHwidAuthorizationAsync();
+            if (!isAuthorized)
+            {
+                try
+                {
+                    File.Move(avatarEnabledPath, avatarDisabledPath);
+                }
+                catch { }
+                avatarEnabled = false;
+            }
+        }
 
         if (fpsEnabled && avatarEnabled)
         {
@@ -336,11 +414,43 @@ public partial class PluginSettingsViewModel : ObservableObject
         }
     }
 
-    private void ChangeAvatarPluginState(bool enable)
+    private async void ChangeAvatarPluginState(bool enable)
     {
-        if (enable && IsFpsPluginEnabled)
+        if (enable)
         {
-            IsFpsPluginEnabled = false;
+            bool isAuthorized = await CheckHwidAuthorizationAsync();
+            if (!isAuthorized)
+            {
+                WeakReferenceMessenger.Default.Send(new NotificationMessage(
+                    "认证未通过",
+                    "您需要进行认证后才可以使用头像替换插件",
+                    NotificationType.Error,
+                    6000
+                ));
+                var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+                if (dispatcher != null)
+                {
+                    dispatcher.TryEnqueue(() => { SetProperty(ref _isAvatarPluginEnabled, false, nameof(IsAvatarPluginEnabled)); });
+                }
+                else
+                {
+                    SetProperty(ref _isAvatarPluginEnabled, false, nameof(IsAvatarPluginEnabled));
+                }
+                
+                string avatarDirCheck = Path.Combine(AppContext.BaseDirectory, "Plugins", "Avatar");
+                string enabledPathCheck = Path.Combine(avatarDirCheck, "Avatar.dll");
+                string disabledPathCheck = Path.Combine(avatarDirCheck, "Avatar.disabled");
+                if (File.Exists(enabledPathCheck))
+                {
+                    try { File.Move(enabledPathCheck, disabledPathCheck); } catch { }
+                }
+                return;
+            }
+
+            if (IsFpsPluginEnabled)
+            {
+                IsFpsPluginEnabled = false;
+            }
         }
 
         string avatarDir = Path.Combine(AppContext.BaseDirectory, "Plugins", "Avatar");
