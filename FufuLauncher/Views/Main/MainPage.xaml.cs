@@ -161,39 +161,7 @@ public sealed partial class MainPage : Page
                 }
                 await File.WriteAllLinesAsync(configPath, lines);
                 
-                string dataDirName = "YuanShen_Data";
-                if (!Directory.Exists(Path.Combine(gameDir, dataDirName)))
-                {
-                    dataDirName = "GenshinImpact_Data";
-                }
-
-                string pluginsDir = Path.Combine(gameDir, dataDirName, "Plugins");
-                string targetSdkPath = Path.Combine(pluginsDir, "PCGameSDK.dll");
-
-                if (!Directory.Exists(pluginsDir)) Directory.CreateDirectory(pluginsDir);
-
-                if (toBilibili)
-                {
-                    string appBaseDir = AppContext.BaseDirectory;
-                    string sourceSdkPath = Path.Combine(appBaseDir, "Assets", "PCGameSDK.dll");
-
-                    if (File.Exists(sourceSdkPath))
-                    {
-                        File.Copy(sourceSdkPath, targetSdkPath, true);
-                    }
-                    else
-                    {
-                        await ShowDialog("错误", $"缺失核心文件：{sourceSdkPath}\n请重新安装该软件");
-                        return;
-                    }
-                }
-                else
-                {
-                    if (File.Exists(targetSdkPath))
-                    {
-                        File.Delete(targetSdkPath);
-                    }
-                }
+                await BilibiliSdkManager.EnsureSdkAndDeprecatedFilesAsync(gameDir, toBilibili);
                 
                 await ShowDialog("切换成功", $"已成功切换至 {(toBilibili ? "Bilibili 服" : "官方服务器")}\nSDK已{(toBilibili ? "部署" : "清理")}");
             }

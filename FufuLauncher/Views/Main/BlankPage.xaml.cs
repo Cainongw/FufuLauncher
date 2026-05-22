@@ -559,7 +559,6 @@ private async void FpsOverlayToggle_Toggled(object sender, RoutedEventArgs e)
     {
         stackPanel.Children.Add(new TextBlock { Text = "请选择你要切换到的服务器：", TextWrapping = TextWrapping.Wrap });
         dialog.PrimaryButtonText = "切换到B服";
-        dialog.IsPrimaryButtonEnabled = false;
         dialog.SecondaryButtonText = "切换到官方服务器";
     }
 

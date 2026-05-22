@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.IO.Compression;
 using FufuLauncher.Constants;
 using FufuLauncher.Protobuf;
 using ZstdSharp;
@@ -134,6 +135,69 @@ namespace FufuLauncher.Views
             using var stream = new FileStream(filepath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             var hashBytes = md5.ComputeHash(stream);
             return BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+        }
+    }
+
+    public static class BilibiliSdkManager
+    {
+        public static async Task EnsureSdkAndDeprecatedFilesAsync(string gameDir, bool toBilibili, Action<string> print = null)
+        {
+            print?.Invoke("清理旧版SDK文件...");
+            string cnDataDir = Path.Combine(gameDir, GameConstants.CN_DATA_DIR);
+            string osDataDir = Path.Combine(gameDir, GameConstants.OS_DATA_DIR);
+            
+            string[] deprecatedFiles = {
+                Path.Combine(cnDataDir, "Plugins", "PCGameSDK.dll"),
+                Path.Combine(cnDataDir, "Plugins", "EOSSDK-Win64-Shipping.dll"),
+                Path.Combine(osDataDir, "Plugins", "PCGameSDK.dll"),
+                Path.Combine(osDataDir, "Plugins", "EOSSDK-Win64-Shipping.dll"),
+                Path.Combine(gameDir, "sdk_pkg_version")
+            };
+
+            foreach (var file in deprecatedFiles)
+            {
+                if (File.Exists(file))
+                {
+                    try { File.Delete(file); } catch { /* ignore */ }
+                }
+            }
+
+            if (!toBilibili) return;
+
+            print?.Invoke("获取B服SDK配置...");
+            string url = $"{GameConstants.CN_API}/getGameChannelSDKs?channel=14&game_ids[]={GameConstants.BILI_GAME_ID}&launcher_id={GameConstants.BILI_LAUNCHER_ID}&sub_channel=0";
+            using var httpClient = new HttpClient();
+            var jsonResp = await httpClient.GetStringAsync(url);
+            using var doc = JsonDocument.Parse(jsonResp);
+            
+            var dataProp = doc.RootElement.GetProperty("data");
+            var sdks = dataProp.GetProperty("game_channel_sdks");
+            if (sdks.GetArrayLength() == 0) throw new Exception("获取B服SDK配置失败");
+            
+            var sdkPkgUrl = sdks[0].GetProperty("channel_sdk_pkg").GetProperty("url").GetString();
+            
+            print?.Invoke("正在下载B服SDK...");
+            string tempFile = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".zip");
+            try
+            {
+                using (var response = await httpClient.GetAsync(sdkPkgUrl, HttpCompletionOption.ResponseHeadersRead))
+                {
+                    response.EnsureSuccessStatusCode();
+                    using var contentStream = await response.Content.ReadAsStreamAsync();
+                    using var fileStream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true);
+                    await contentStream.CopyToAsync(fileStream);
+                }
+                
+                print?.Invoke("正在解压B服SDK...");
+                await Task.Run(() => ZipFile.ExtractToDirectory(tempFile, gameDir, true));
+            }
+            finally
+            {
+                if (File.Exists(tempFile))
+                {
+                    try { File.Delete(tempFile); } catch { /* ignore */ }
+                }
+            }
         }
     }
 
@@ -855,12 +919,6 @@ private async Task<(string manifestUrl, string chunkPrefix, string chunkSuffix)>
                 if (File.Exists(dstPath)) File.Delete(dstPath);
                 File.Move(file, dstPath);
             }
-
-            string sdkPkgVersionFile = Path.Combine(gameDir, "sdk_pkg_version");
-            if (targetIsOversea && File.Exists(sdkPkgVersionFile))
-            {
-                File.Delete(sdkPkgVersionFile);
-            }
             
             string configPath = Path.Combine(gameDir, "config.ini");
             string configContent = "";
@@ -879,26 +937,7 @@ private async Task<(string manifestUrl, string chunkPrefix, string chunkSuffix)>
 
             File.WriteAllText(configPath, configContent);
             
-            if (targetIsBilibili)
-            {
-                string bilibiliPluginsDir = Path.Combine(gameDir, targetDataDirName, "Plugins");
-                string targetSdkPath = Path.Combine(bilibiliPluginsDir, "PCGameSDK.dll");
-
-                if (!Directory.Exists(bilibiliPluginsDir)) Directory.CreateDirectory(bilibiliPluginsDir);
-
-                string appBaseDir = AppContext.BaseDirectory;
-                string sourceSdkPath = Path.Combine(appBaseDir, "Assets", "PCGameSDK.dll");
-
-                if (File.Exists(sourceSdkPath))
-                {
-                    File.Copy(sourceSdkPath, targetSdkPath, true);
-                    print("B服SDK已注入");
-                }
-                else
-                {
-                    print("PCGameSDK.dll不存在");
-                }
-            }
+            BilibiliSdkManager.EnsureSdkAndDeprecatedFilesAsync(gameDir, targetIsBilibili, print).GetAwaiter().GetResult();
         }
     }
 }
