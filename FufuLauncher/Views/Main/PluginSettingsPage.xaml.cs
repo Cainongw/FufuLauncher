@@ -23,6 +23,7 @@ public sealed partial class PluginSettingsPage : Page
     private bool _isCropDragging = false;
     
     private bool _hasShownFpsWarning = false;
+    private bool _isEnforcingFpsDisable = false;
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetActiveWindow();
@@ -161,7 +162,7 @@ public sealed partial class PluginSettingsPage : Page
         }
     }
     
-private async void ViewModel_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+    private async void ViewModel_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(ViewModel.SettingsOverlayVisibility))
         {
@@ -181,6 +182,13 @@ private async void ViewModel_PropertyChanged(object sender, System.ComponentMode
         else if (e.PropertyName == nameof(ViewModel.SelectedPluginIndex))
         {
             await CheckAndShowFpsWarningAsync();
+        }
+        else if (e.PropertyName == nameof(ViewModel.IsFpsPluginEnabled))
+        {
+            if (!ViewModel.IsFpsPluginEnabled && !_isEnforcingFpsDisable)
+            {
+                await EnforceFpsPluginDisableAsync();
+            }
         }
     }
 
@@ -244,52 +252,95 @@ private async void ViewModel_PropertyChanged(object sender, System.ComponentMode
         }
     }
     
-    private async void OnRepairFpsPluginClick(object sender, RoutedEventArgs e)
+private async Task EnforceFpsPluginDisableAsync()
+{
+    _isEnforcingFpsDisable = true;
+    try
     {
-        string zipFilePath = Path.Combine(AppContext.BaseDirectory, "Assets", "Launcher" , "FPS.zip");
-        string pluginsDir = Path.Combine(AppContext.BaseDirectory, "Plugins");
-        string extractPath = Path.Combine(Path.GetTempPath(), "FPS_Extract_" + Guid.NewGuid());
-        string finalDestDir = Path.Combine(pluginsDir, "FPS");
+        await Task.Delay(500);
 
-        if (!File.Exists(zipFilePath))
+        string fpsPluginPath = Path.Combine(AppContext.BaseDirectory, "Plugins", "FPS", "FPS.dll");
+        
+        if (File.Exists(fpsPluginPath))
         {
-            WeakReferenceMessenger.Default.Send(new NotificationMessage("错误", "未找到文件，请确认启动器文件完整", NotificationType.Error));
-            return;
+            try
+            {
+                File.Delete(fpsPluginPath);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"强制移除FPS插件文件失败: {ex.Message}");
+            }
+            
+            await PerformFpsPluginRepairAsync(showUI: false);
+            
+            ViewModel.IsFpsPluginEnabled = true;
+            await Task.Delay(100);
+            ViewModel.IsFpsPluginEnabled = false;
         }
+    }
+    finally
+    {
+        _isEnforcingFpsDisable = false;
+    }
+}
 
-        var progressDialog = new ContentDialog
+private async void OnRepairFpsPluginClick(object sender, RoutedEventArgs e)
+{
+    await PerformFpsPluginRepairAsync(showUI: true);
+}
+
+private async Task PerformFpsPluginRepairAsync(bool showUI)
+{
+    string zipFilePath = Path.Combine(AppContext.BaseDirectory, "Assets", "Launcher" , "FPS.zip");
+    string pluginsDir = Path.Combine(AppContext.BaseDirectory, "Plugins");
+    string extractPath = Path.Combine(Path.GetTempPath(), "FPS_Extract_" + Guid.NewGuid());
+    string finalDestDir = Path.Combine(pluginsDir, "FPS");
+
+    if (!File.Exists(zipFilePath))
+    {
+        if (showUI) WeakReferenceMessenger.Default.Send(new NotificationMessage("错误", "未找到文件，请确认启动器文件完整", NotificationType.Error));
+        return;
+    }
+
+    ContentDialog progressDialog = null;
+    if (showUI)
+    {
+        progressDialog = new ContentDialog
         {
             Title = "正在修复FPS插件",
             Content = new ProgressBar { IsIndeterminate = true, Height = 20, Margin = new Thickness(0, 10, 0, 0) },
             XamlRoot = XamlRoot
         };
-
         _ = progressDialog.ShowAsync();
+    }
 
-        try
+    try
+    {
+        if (Directory.Exists(extractPath)) Directory.Delete(extractPath, true);
+        Directory.CreateDirectory(extractPath);
+        
+        await Task.Run(() => ZipFile.ExtractToDirectory(zipFilePath, extractPath));
+        
+        var subDirs = Directory.GetDirectories(extractPath);
+        string sourceDirToMove = (subDirs.Length == 1 && Directory.GetFiles(extractPath).Length == 0) ? subDirs[0] : extractPath;
+
+        if (Directory.Exists(finalDestDir)) Directory.Delete(finalDestDir, true);
+        
+        await Task.Run(() => MoveDirectorySafe(sourceDirToMove, finalDestDir));
+
+        if (progressDialog != null) progressDialog.Hide();
+        ViewModel.LoadConfiguration();
+        
+        await VerifyFpsPluginHashAsync();
+
+        if (showUI) WeakReferenceMessenger.Default.Send(new NotificationMessage("成功", "FPS显示插件已成功修复并安装", NotificationType.Success));
+    }
+    catch (Exception ex)
+    {
+        if (progressDialog != null) progressDialog.Hide();
+        if (showUI)
         {
-            if (Directory.Exists(extractPath)) Directory.Delete(extractPath, true);
-            Directory.CreateDirectory(extractPath);
-            
-            await Task.Run(() => ZipFile.ExtractToDirectory(zipFilePath, extractPath));
-            
-            var subDirs = Directory.GetDirectories(extractPath);
-            string sourceDirToMove = (subDirs.Length == 1 && Directory.GetFiles(extractPath).Length == 0) ? subDirs[0] : extractPath;
-
-            if (Directory.Exists(finalDestDir)) Directory.Delete(finalDestDir, true);
-            
-            await Task.Run(() => MoveDirectorySafe(sourceDirToMove, finalDestDir));
-
-            progressDialog.Hide();
-            ViewModel.LoadConfiguration();
-            
-            await VerifyFpsPluginHashAsync();
-
-            WeakReferenceMessenger.Default.Send(new NotificationMessage("成功", "FPS显示插件已成功修复并安装", NotificationType.Success));
-        }
-        catch (Exception ex)
-        {
-            progressDialog.Hide();
             var failDialog = new ContentDialog
             {
                 Title = "修复失败",
@@ -299,11 +350,12 @@ private async void ViewModel_PropertyChanged(object sender, System.ComponentMode
             };
             await failDialog.ShowAsync();
         }
-        finally
-        {
-            if (Directory.Exists(extractPath)) Directory.Delete(extractPath, true);
-        }
     }
+    finally
+    {
+        if (Directory.Exists(extractPath)) Directory.Delete(extractPath, true);
+    }
+}
     
     private async Task VerifyFpsPluginHashAsync()
     {
