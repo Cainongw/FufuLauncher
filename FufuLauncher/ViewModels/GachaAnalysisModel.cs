@@ -48,6 +48,7 @@ public partial class GachaAnalysisModel : ObservableObject
 
     private List<GachaLogItem> _cachedCharacterLogs = new();
     private List<GachaLogItem> _cachedWeaponLogs = new();
+    private List<GachaLogItem> _cachedChronicledLogs = new();
     private List<GachaLogItem> _cachedStandardLogs = new();
     private List<ScrapedMetadata> _savedMetadata = new();
     private string _currentUid = "";
@@ -59,16 +60,20 @@ public partial class GachaAnalysisModel : ObservableObject
     [ObservableProperty] private bool _isScraping;
     [ObservableProperty] private GachaStatistic _characterStats = new() { PoolName = "角色活动" };
     [ObservableProperty] private GachaStatistic _weaponStats = new() { PoolName = "武器活动" };
+    [ObservableProperty] private GachaStatistic _chronicledStats = new() { PoolName = "集录祈愿" };
     [ObservableProperty] private GachaStatistic _standardStats = new() { PoolName = "常驻祈愿" };
 
     [ObservableProperty] private ObservableCollection<GachaDisplayItem> _characterFiveStars = new();
     [ObservableProperty] private ObservableCollection<GachaDisplayItem> _weaponFiveStars = new();
+    [ObservableProperty] private ObservableCollection<GachaDisplayItem> _chronicledFiveStars = new();
     [ObservableProperty] private ObservableCollection<GachaDisplayItem> _standardFiveStars = new();
     [ObservableProperty] private ObservableCollection<GachaDisplayItem> _characterFourStars = new();
     [ObservableProperty] private ObservableCollection<GachaDisplayItem> _weaponFourStars = new();
+    [ObservableProperty] private ObservableCollection<GachaDisplayItem> _chronicledFourStars = new();
     [ObservableProperty] private ObservableCollection<GachaDisplayItem> _standardFourStars = new();
     
-    [ObservableProperty] private ObservableCollection<ScrapedMetadata> _allMetadataPreview = new();
+    [ObservableProperty] private ObservableCollection<ScrapedMetadata> _characterMetadataPreview = new();
+    [ObservableProperty] private ObservableCollection<ScrapedMetadata> _weaponMetadataPreview = new();
     [ObservableProperty] private ObservableCollection<string> _knownUids = new();
     [ObservableProperty] private ObservableCollection<string> _uidComboItems = new();
     [ObservableProperty] private string _selectedUid = "";
@@ -76,7 +81,20 @@ public partial class GachaAnalysisModel : ObservableObject
     // 添加四星视图的控制开关
     [ObservableProperty] private bool _isCharacterFourStarVisible;
     [ObservableProperty] private bool _isWeaponFourStarVisible;
+    [ObservableProperty] private bool _isChronicledFourStarVisible;
     [ObservableProperty] private bool _isStandardFourStarVisible;
+
+    // 四星分割线显示条件
+    public bool ShowCharacterFourDivider => IsCharacterFourStarVisible && CharacterFourStars?.Count > 0;
+    public bool ShowWeaponFourDivider => IsWeaponFourStarVisible && WeaponFourStars?.Count > 0;
+    public bool ShowChronicledFourDivider => IsChronicledFourStarVisible && ChronicledFourStars?.Count > 0;
+    public bool ShowStandardFourDivider => IsStandardFourStarVisible && StandardFourStars?.Count > 0;
+
+    // "暂无记录"显示条件
+    public bool ShowCharacterNoRecords => CharacterStats?.FiveStarCount == 0 && (!IsCharacterFourStarVisible || CharacterFourStars?.Count == 0);
+    public bool ShowWeaponNoRecords => WeaponStats?.FiveStarCount == 0 && (!IsWeaponFourStarVisible || WeaponFourStars?.Count == 0);
+    public bool ShowChronicledNoRecords => ChronicledStats?.FiveStarCount == 0 && (!IsChronicledFourStarVisible || ChronicledFourStars?.Count == 0);
+    public bool ShowStandardNoRecords => StandardStats?.FiveStarCount == 0 && (!IsStandardFourStarVisible || StandardFourStars?.Count == 0);
 
     public const string AddNewUserItem = "＋ 添加新用户";
     [ObservableProperty] private bool _hasGachaData;
@@ -120,6 +138,14 @@ public partial class GachaAnalysisModel : ObservableObject
                 ItemType TEXT,
                 RankType TEXT,
                 PRIMARY KEY (Id, Uid)
+            );
+            CREATE TABLE IF NOT EXISTS GachaPoolMetadata (
+                Version TEXT NOT NULL,
+                PoolType TEXT NOT NULL,
+                StartTime TEXT NOT NULL,
+                EndTime TEXT NOT NULL,
+                UpItems TEXT NOT NULL,
+                PRIMARY KEY (Version, PoolType)
             );
         ";
         command.ExecuteNonQuery();
@@ -187,7 +213,11 @@ public partial class GachaAnalysisModel : ObservableObject
     private void LoadMetadataFromDb()
     {
         _savedMetadata.Clear();
-        App.MainWindow.DispatcherQueue.TryEnqueue(() => AllMetadataPreview.Clear());
+        App.MainWindow.DispatcherQueue.TryEnqueue(() =>
+        {
+            CharacterMetadataPreview.Clear();
+            WeaponMetadataPreview.Clear();
+        });
 
         using var connection = new SqliteConnection(_dbConnectionString);
         connection.Open();
@@ -209,7 +239,12 @@ public partial class GachaAnalysisModel : ObservableObject
             if (!reader.IsDBNull(4)) item.Rank = reader.GetString(4);
             if (!reader.IsDBNull(5)) item.ItemId = reader.GetString(5);
             _savedMetadata.Add(item);
-            App.MainWindow.DispatcherQueue.TryEnqueue(() => AllMetadataPreview.Add(item));
+            var isChar = item.Type == "char";
+            App.MainWindow.DispatcherQueue.TryEnqueue(() =>
+            {
+                if (isChar) CharacterMetadataPreview.Add(item);
+                else WeaponMetadataPreview.Add(item);
+            });
         }
     }
 
@@ -296,6 +331,7 @@ public partial class GachaAnalysisModel : ObservableObject
     {
         _cachedCharacterLogs.Clear();
         _cachedWeaponLogs.Clear();
+        _cachedChronicledLogs.Clear();
         _cachedStandardLogs.Clear();
 
         if (string.IsNullOrEmpty(uid)) return;
@@ -323,12 +359,13 @@ public partial class GachaAnalysisModel : ObservableObject
                     ItemType = reader.IsDBNull(7) ? null : reader.GetString(7),
                     RankType = reader.IsDBNull(8) ? null : reader.GetString(8)
                 };
-                var gt = item.GachaType;
+                var gt = GetNormalizedGachaType(item.GachaType);
                 if (gt == "301") _cachedCharacterLogs.Add(item);
                 else if (gt == "302") _cachedWeaponLogs.Add(item);
+                else if (gt == "500") _cachedChronicledLogs.Add(item);
                 else _cachedStandardLogs.Add(item);
             }
-            Debug.WriteLine($"[Gacha] 加载完成 UID={uid}: 角色{_cachedCharacterLogs.Count} 武器{_cachedWeaponLogs.Count} 常驻{_cachedStandardLogs.Count}");
+            Debug.WriteLine($"[Gacha] 加载完成 UID={uid}: 角色{_cachedCharacterLogs.Count} 武器{_cachedWeaponLogs.Count} 集录{_cachedChronicledLogs.Count} 常驻{_cachedStandardLogs.Count}");
         }
         catch (Exception ex)
         {
@@ -341,7 +378,7 @@ public partial class GachaAnalysisModel : ObservableObject
         if (string.IsNullOrEmpty(_currentUid)) { Debug.WriteLine("[Gacha] SaveGachaLogsToDb: _currentUid 为空，跳过保存"); return; }
         try
         {
-            var totalBefore = _cachedCharacterLogs.Count + _cachedWeaponLogs.Count + _cachedStandardLogs.Count;
+                var totalBefore = _cachedCharacterLogs.Count + _cachedWeaponLogs.Count + _cachedChronicledLogs.Count + _cachedStandardLogs.Count;
             Debug.WriteLine($"[Gacha] SaveGachaLogsToDb: 开始保存 UID={_currentUid}, 共 {totalBefore} 条记录");
             using var connection = new SqliteConnection(_dbConnectionString);
             connection.Open();
@@ -386,6 +423,7 @@ public partial class GachaAnalysisModel : ObservableObject
 
             InsertItems(_cachedCharacterLogs);
             InsertItems(_cachedWeaponLogs);
+            InsertItems(_cachedChronicledLogs);
             InsertItems(_cachedStandardLogs);
             transaction.Commit();
             Debug.WriteLine($"[Gacha] 保存完成 UID={_currentUid}: 角色{_cachedCharacterLogs.Count} 武器{_cachedWeaponLogs.Count} 常驻{_cachedStandardLogs.Count}");
@@ -588,6 +626,11 @@ public partial class GachaAnalysisModel : ObservableObject
                 IsDataLoaded = true;
                 CrawlerStatus = metadataCount > 0 ? "已加载本地数据和图片资源缓存" : "已加载本地历史记录";
             });
+
+            if (!HasPoolMetadataCache())
+            {
+                _ = FetchGachaPoolMetadataAsync();
+            }
         }
         else
         {
@@ -643,6 +686,8 @@ public partial class GachaAnalysisModel : ObservableObject
         SaveGachaLogsToDb();
         RefreshKnownUids();
         Debug.WriteLine("[Gacha] SaveGachaDataAsync: 完成");
+
+        _ = FetchGachaPoolMetadataAsync();
     }
 
     private List<GachaLogItem> MergeLogs(List<GachaLogItem> existing, List<GachaLogItem> incoming)
@@ -662,20 +707,27 @@ public partial class GachaAnalysisModel : ObservableObject
     {
         var charLogs = _cachedCharacterLogs.OrderBy(x => x.Id).ToList();
         var weaponLogs = _cachedWeaponLogs.OrderBy(x => x.Id).ToList();
+        var chronicledLogs = _cachedChronicledLogs.OrderBy(x => x.Id).ToList();
         var standardLogs = _cachedStandardLogs.OrderBy(x => x.Id).ToList();
 
         var version = ++_refreshVersion;
 
         _ = Task.Run(() =>
         {
+            var charPools = LoadPoolMetadataFromDb("301");
+            var weaponPools = LoadPoolMetadataFromDb("302");
+
             var charStats = _gachaService.AnalyzePool("301", charLogs);
             var weaponStats = _gachaService.AnalyzePool("302", weaponLogs);
+            var chronicledStats = _gachaService.AnalyzePool("500", chronicledLogs);
             var standardStats = _gachaService.AnalyzePool("200", standardLogs);
 
-            var charFive = BuildDisplayCollection(charStats.FiveStarRecords, "角色");
-            var charFour = BuildDisplayCollection(charStats.FourStarRecords, "角色");
-            var weaponFive = BuildDisplayCollection(weaponStats.FiveStarRecords, "武器");
-            var weaponFour = BuildDisplayCollection(weaponStats.FourStarRecords, "武器");
+            var charFive = BuildDisplayCollection(charStats.FiveStarRecords, "角色", charPools);
+            var charFour = BuildDisplayCollection(charStats.FourStarRecords, "角色", charPools);
+            var weaponFive = BuildDisplayCollection(weaponStats.FiveStarRecords, "武器", weaponPools);
+            var weaponFour = BuildDisplayCollection(weaponStats.FourStarRecords, "武器", weaponPools);
+            var chronicledFive = BuildDisplayCollection(chronicledStats.FiveStarRecords, "集录");
+            var chronicledFour = BuildDisplayCollection(chronicledStats.FourStarRecords, "集录");
             var standardFive = BuildDisplayCollection(standardStats.FiveStarRecords, "常驻");
             var standardFour = BuildDisplayCollection(standardStats.FourStarRecords, "常驻");
 
@@ -685,13 +737,26 @@ public partial class GachaAnalysisModel : ObservableObject
 
                 CharacterStats = charStats;
                 WeaponStats = weaponStats;
+                ChronicledStats = chronicledStats;
                 StandardStats = standardStats;
                 CharacterFiveStars = charFive;
                 CharacterFourStars = charFour;
                 WeaponFiveStars = weaponFive;
                 WeaponFourStars = weaponFour;
+                ChronicledFiveStars = chronicledFive;
+                ChronicledFourStars = chronicledFour;
                 StandardFiveStars = standardFive;
                 StandardFourStars = standardFour;
+
+                // 通知相关属性更新
+                OnPropertyChanged(nameof(ShowCharacterNoRecords));
+                OnPropertyChanged(nameof(ShowWeaponNoRecords));
+                OnPropertyChanged(nameof(ShowChronicledNoRecords));
+                OnPropertyChanged(nameof(ShowStandardNoRecords));
+                OnPropertyChanged(nameof(ShowCharacterFourDivider));
+                OnPropertyChanged(nameof(ShowWeaponFourDivider));
+                OnPropertyChanged(nameof(ShowChronicledFourDivider));
+                OnPropertyChanged(nameof(ShowStandardFourDivider));
 
                 if (_savedMetadata != null && _savedMetadata.Count > 0) _ = ApplyMetadataToUIAsync(_savedMetadata);
             });
@@ -714,6 +779,7 @@ public partial class GachaAnalysisModel : ObservableObject
         _currentUid = "";
         _cachedCharacterLogs.Clear();
         _cachedWeaponLogs.Clear();
+        _cachedChronicledLogs.Clear();
         _cachedStandardLogs.Clear();
 
         App.MainWindow.DispatcherQueue.TryEnqueue(() =>
@@ -722,6 +788,7 @@ public partial class GachaAnalysisModel : ObservableObject
             ClearCollections();
             CharacterStats = new GachaStatistic { PoolName = "角色活动" };
             WeaponStats = new GachaStatistic { PoolName = "武器活动" };
+            ChronicledStats = new GachaStatistic { PoolName = "集录祈愿" };
             StandardStats = new GachaStatistic { PoolName = "常驻祈愿" };
             HasGachaData = false;
             CrawlerStatus = "等待获取数据...";
@@ -811,12 +878,19 @@ public partial class GachaAnalysisModel : ObservableObject
             foreach (var l in weaponLogs) l.Uid = gameUid;
             _cachedWeaponLogs = MergeLogs(_cachedWeaponLogs, weaponLogs);
 
-            CrawlerStatus = $"武器活动 {weaponLogs.Count} 条，正在获取常驻祈愿记录...";
+            CrawlerStatus = $"武器活动 {weaponLogs.Count} 条，正在获取集录祈愿记录...";
+            var chronicledLogs = await _gachaService.FetchGachaLogAsync(baseUrl, "500", count => OnProgress("集录祈愿", count));
+            foreach (var l in chronicledLogs) l.Uid = gameUid;
+            _cachedChronicledLogs = MergeLogs(_cachedChronicledLogs, chronicledLogs);
+
+            CrawlerStatus = $"集录祈愿 {chronicledLogs.Count} 条，正在获取常驻祈愿记录...";
             var standardLogs = await _gachaService.FetchGachaLogAsync(baseUrl, "200", count => OnProgress("常驻祈愿", count));
             foreach (var l in standardLogs) l.Uid = gameUid;
             _cachedStandardLogs = MergeLogs(_cachedStandardLogs, standardLogs);
 
-            var total = charLogs.Count + weaponLogs.Count + standardLogs.Count;
+            FillMissingFieldsFromMetadata(charLogs, weaponLogs, chronicledLogs, standardLogs);
+
+            var total = charLogs.Count + weaponLogs.Count + chronicledLogs.Count + standardLogs.Count;
             CrawlerStatus = $"获取完成，共 {total} 条记录，正在检查图片资源...";
 
             RefreshUIFromCache();
@@ -842,7 +916,7 @@ public partial class GachaAnalysisModel : ObservableObject
     {
         try
         {
-            var allLogs = _cachedCharacterLogs.Concat(_cachedWeaponLogs).Concat(_cachedStandardLogs).ToList();
+            var allLogs = _cachedCharacterLogs.Concat(_cachedWeaponLogs).Concat(_cachedChronicledLogs).Concat(_cachedStandardLogs).ToList();
             if (allLogs.Count == 0)
             {
                 OnErrorAction?.Invoke("没有可导出的抽卡记录");
@@ -985,28 +1059,9 @@ public partial class GachaAnalysisModel : ObservableObject
 
             CrawlerStatus = $"正在导入 {items.Count} 条记录...";
 
-            var metaByItemId = _savedMetadata
-                .Where(m => !string.IsNullOrEmpty(m.ItemId))
-                .GroupBy(m => m.ItemId)
-                .ToDictionary(g => g.Key, g => g.First());
-
             var newLogs = items.Select(uigfItem =>
             {
-                var gachaType = !string.IsNullOrEmpty(uigfItem.UigfGachaType)
-                    ? UigfToGameGachaType(uigfItem.UigfGachaType)
-                    : uigfItem.GachaType;
-
-                var name = uigfItem.Name;
-                if (string.IsNullOrEmpty(name) && metaByItemId.TryGetValue(uigfItem.ItemId, out var meta))
-                    name = meta.Name;
-                if (string.IsNullOrEmpty(name))
-                    name = uigfItem.ItemId;
-
-                var rankType = uigfItem.RankType;
-                if (string.IsNullOrEmpty(rankType) && metaByItemId.TryGetValue(uigfItem.ItemId, out meta) && !string.IsNullOrEmpty(meta.Rank))
-                    rankType = meta.Rank;
-                if (string.IsNullOrEmpty(rankType))
-                    rankType = "3";
+                var gachaType = uigfItem.GachaType;
 
                 var time = uigfItem.Time ?? "";
                 if (entryTimezone != 8 && !string.IsNullOrEmpty(time))
@@ -1029,16 +1084,18 @@ public partial class GachaAnalysisModel : ObservableObject
                     GachaType = gachaType,
                     ItemId = uigfItem.ItemId,
                     Time = time,
-                    Name = name,
-                    RankType = rankType,
+                    Name = uigfItem.Name,
+                    RankType = uigfItem.RankType,
                     ItemType = uigfItem.ItemType,
                     Lang = entryLang
                 };
             }).ToList();
 
-            _cachedCharacterLogs = MergeLogs(_cachedCharacterLogs, newLogs.Where(x => x.GachaType == "301").ToList());
-            _cachedWeaponLogs = MergeLogs(_cachedWeaponLogs, newLogs.Where(x => x.GachaType == "302").ToList());
-            _cachedStandardLogs = MergeLogs(_cachedStandardLogs, newLogs.Where(x => x.GachaType == "200" || x.GachaType == "100").ToList());
+            FillMissingFieldsFromMetadata(newLogs);
+            _cachedCharacterLogs = MergeLogs(_cachedCharacterLogs, newLogs.Where(x => GetNormalizedGachaType(x.GachaType) == "301").ToList());
+            _cachedWeaponLogs = MergeLogs(_cachedWeaponLogs, newLogs.Where(x => GetNormalizedGachaType(x.GachaType) == "302").ToList());
+            _cachedChronicledLogs = MergeLogs(_cachedChronicledLogs, newLogs.Where(x => GetNormalizedGachaType(x.GachaType) == "500").ToList());
+            _cachedStandardLogs = MergeLogs(_cachedStandardLogs, newLogs.Where(x => GetNormalizedGachaType(x.GachaType) != "301" && GetNormalizedGachaType(x.GachaType) != "302" && GetNormalizedGachaType(x.GachaType) != "500").ToList());
 
             RefreshUIFromCache();
             HasGachaData = true;
@@ -1060,26 +1117,60 @@ public partial class GachaAnalysisModel : ObservableObject
         if (!IsScraping) IsFetching = false;
     }
 
+    private void FillMissingFieldsFromMetadata(params List<GachaLogItem>[] logLists)
+    {
+        if (_savedMetadata.Count == 0) return;
+        var byName = new Dictionary<string, ScrapedMetadata>();
+        var byItemId = new Dictionary<string, ScrapedMetadata>();
+        foreach (var m in _savedMetadata)
+        {
+            if (!string.IsNullOrEmpty(m.Name) && !string.IsNullOrEmpty(m.ItemId))
+                byName[m.Name] = m;
+            if (!string.IsNullOrEmpty(m.ItemId))
+                byItemId[m.ItemId] = m;
+        }
+
+        foreach (var logs in logLists)
+        {
+            foreach (var log in logs)
+            {
+                if (string.IsNullOrEmpty(log.ItemId) && !string.IsNullOrEmpty(log.Name)
+                    && byName.TryGetValue(log.Name, out var byNameMeta))
+                    log.ItemId = byNameMeta.ItemId;
+
+                if (string.IsNullOrEmpty(log.Name) && !string.IsNullOrEmpty(log.ItemId)
+                    && byItemId.TryGetValue(log.ItemId, out var byIdMeta))
+                    log.Name = byIdMeta.Name;
+
+                if (string.IsNullOrEmpty(log.RankType) && !string.IsNullOrEmpty(log.ItemId)
+                    && byItemId.TryGetValue(log.ItemId, out var byIdRankMeta)
+                    && !string.IsNullOrEmpty(byIdRankMeta.Rank))
+                    log.RankType = byIdRankMeta.Rank;
+            }
+        }
+    }
+
+    private static string GetNormalizedGachaType(string gachaType) => gachaType switch
+    {
+        "301" or "400" => "301",
+        "302" => "302",
+        "200" => "200",
+        "100" => "100",
+        "500" => "500",
+        _ => "200"
+    };
+
     private static string GameToUigfGachaType(string gameType) => gameType switch
     {
         "100" => "100",
         "200" => "200",
         "301" => "301",
         "302" => "302",
-        "400" => "500",
+        "400" => "301",
         "500" => "500",
         _ => gameType
     };
 
-    private static string UigfToGameGachaType(string uigfType) => uigfType switch
-    {
-        "100" => "100",
-        "200" => "200",
-        "301" => "301",
-        "302" => "302",
-        "500" => "500",
-        _ => uigfType
-    };
 
     [RelayCommand]
     private async Task FetchGachaDataAsync()
@@ -1112,10 +1203,13 @@ public partial class GachaAnalysisModel : ObservableObject
             CrawlerStatus = $"角色活动 {charLogs.Count} 条，正在获取武器活动记录...";
             var weaponLogs = await _gachaService.FetchGachaLogAsync(baseUrl, "302", count => OnProgress("武器活动", count));
 
-            CrawlerStatus = $"武器活动 {weaponLogs.Count} 条，正在获取常驻祈愿记录...";
+            CrawlerStatus = $"武器活动 {weaponLogs.Count} 条，正在获取集录祈愿记录...";
+            var chronicledLogs = await _gachaService.FetchGachaLogAsync(baseUrl, "500", count => OnProgress("集录祈愿", count));
+
+            CrawlerStatus = $"集录祈愿 {chronicledLogs.Count} 条，正在获取常驻祈愿记录...";
             var standardLogs = await _gachaService.FetchGachaLogAsync(baseUrl, "200", count => OnProgress("常驻祈愿", count));
 
-            var allFetched = charLogs.Concat(weaponLogs).Concat(standardLogs).ToList();
+            var allFetched = charLogs.Concat(weaponLogs).Concat(chronicledLogs).Concat(standardLogs).ToList();
             var fetchedUid = allFetched.FirstOrDefault(l => !string.IsNullOrEmpty(l.Uid))?.Uid ?? "";
 
             if (!await HandleUidMismatchAsync(fetchedUid)) { IsFetching = false; return; }
@@ -1124,9 +1218,12 @@ public partial class GachaAnalysisModel : ObservableObject
 
             _cachedCharacterLogs = MergeLogs(_cachedCharacterLogs, charLogs);
             _cachedWeaponLogs = MergeLogs(_cachedWeaponLogs, weaponLogs);
+            _cachedChronicledLogs = MergeLogs(_cachedChronicledLogs, chronicledLogs);
             _cachedStandardLogs = MergeLogs(_cachedStandardLogs, standardLogs);
 
-            var total = charLogs.Count + weaponLogs.Count + standardLogs.Count;
+            FillMissingFieldsFromMetadata(charLogs, weaponLogs, chronicledLogs, standardLogs);
+
+            var total = charLogs.Count + weaponLogs.Count + chronicledLogs.Count + standardLogs.Count;
             CrawlerStatus = $"获取完成，共 {total} 条记录，正在检查图片资源...";
 
             RefreshUIFromCache();
@@ -1155,12 +1252,33 @@ public partial class GachaAnalysisModel : ObservableObject
         StandardFourStars = new();
     }
 
-    private ObservableCollection<GachaDisplayItem> BuildDisplayCollection(List<FiveStarRecord> records, string typeHint)
+    private ObservableCollection<GachaDisplayItem> BuildDisplayCollection(List<FiveStarRecord> records, string typeHint, List<GachaPoolMetadata> pools = null)
     {
         var items = new GachaDisplayItem[records.Count];
+        bool wasPreviousLost = false;
+
         for (var i = 0; i < records.Count; i++)
         {
             var record = records[i];
+
+            var logItem = new GachaLogItem
+            {
+                Name = record.Name,
+                Time = record.Time,
+                RankType = record.Rank.ToString(),
+                ItemId = record.ItemId ?? ""
+            };
+
+            var pityStatus = pools != null ?
+                DeterminePityStatus(logItem, pools, record.PityUsed, wasPreviousLost) :
+                PityStatus.None;
+
+            // 5星物品才影响wasPreviousLost状态
+            if (record.Rank == 5)
+            {
+                wasPreviousLost = (pityStatus == PityStatus.LostPity);
+            }
+
             items[i] = new GachaDisplayItem
             {
                 Name = record.Name,
@@ -1168,7 +1286,8 @@ public partial class GachaAnalysisModel : ObservableObject
                 Time = record.Time,
                 Rank = record.Rank,
                 Type = typeHint,
-                ImageUrl = "ms-appx:///Assets/StoreLogo.png"
+                ImageUrl = "ms-appx:///Assets/StoreLogo.png",
+                PityStatus = pityStatus
             };
         }
         return new ObservableCollection<GachaDisplayItem>(items);
@@ -1181,6 +1300,8 @@ public partial class GachaAnalysisModel : ObservableObject
 
         try
         {
+            await FetchGachaPoolMetadataAsync();
+
             string? cookie = null;
             try
             {
@@ -1333,5 +1454,175 @@ public partial class GachaAnalysisModel : ObservableObject
                 if (elementUrl != null) item.ElementUrl = elementUrl;
             }
         });
+    }
+
+    private async Task FetchGachaPoolMetadataAsync()
+    {
+        try
+        {
+            CrawlerStatus = "正在获取卡池元数据...";
+
+            var charMetadata = await _httpClient.GetStringAsync(ApiEndpoints.GachaCharacterMetadataUrl);
+            var charPools = JsonSerializer.Deserialize<List<GachaPoolMetadata>>(charMetadata);
+
+            var weaponMetadata = await _httpClient.GetStringAsync(ApiEndpoints.GachaWeaponMetadataUrl);
+            var weaponPools = JsonSerializer.Deserialize<List<GachaPoolMetadata>>(weaponMetadata);
+
+            await SavePoolMetadataToDbAsync(charPools, "301");
+            await SavePoolMetadataToDbAsync(weaponPools, "302");
+
+            CrawlerStatus = $"卡池元数据更新完成";
+
+            if (_cachedCharacterLogs.Count + _cachedWeaponLogs.Count > 0)
+            {
+                App.MainWindow.DispatcherQueue.TryEnqueue(() => RefreshUIFromCache());
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Gacha] 获取卡池元数据失败: {ex.Message}");
+        }
+    }
+
+    private async Task SavePoolMetadataToDbAsync(List<GachaPoolMetadata> pools, string poolType)
+    {
+        if (pools == null) return;
+
+        using var connection = new SqliteConnection(_dbConnectionString);
+        connection.Open();
+        using var transaction = connection.BeginTransaction();
+        var command = connection.CreateCommand();
+
+        command.CommandText = @"
+            INSERT INTO GachaPoolMetadata (Version, PoolType, StartTime, EndTime, UpItems)
+            VALUES ($version, $poolType, $startTime, $endTime, $upItems)
+            ON CONFLICT(Version, PoolType) DO UPDATE SET
+                StartTime=excluded.StartTime,
+                EndTime=excluded.EndTime,
+                UpItems=excluded.UpItems;
+        ";
+
+        foreach (var pool in pools)
+        {
+            var upItemsJson = JsonSerializer.Serialize(pool.Items.Select(i => i.ItemId));
+            command.Parameters.Clear();
+            command.Parameters.AddWithValue("$version", pool.Version);
+            command.Parameters.AddWithValue("$poolType", poolType);
+            command.Parameters.AddWithValue("$startTime", pool.Start);
+            command.Parameters.AddWithValue("$endTime", pool.End);
+            command.Parameters.AddWithValue("$upItems", upItemsJson);
+            command.ExecuteNonQuery();
+        }
+
+        transaction.Commit();
+    }
+
+    private List<GachaPoolMetadata> LoadPoolMetadataFromDb(string poolType)
+    {
+        var pools = new List<GachaPoolMetadata>();
+        using var connection = new SqliteConnection(_dbConnectionString);
+        connection.Open();
+        var command = connection.CreateCommand();
+        command.CommandText = "SELECT Version, StartTime, EndTime, UpItems FROM GachaPoolMetadata WHERE PoolType = $poolType ORDER BY StartTime DESC";
+        command.Parameters.AddWithValue("$poolType", poolType);
+
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            var upItemsJson = reader.GetString(3);
+            var upItems = JsonSerializer.Deserialize<List<int>>(upItemsJson);
+
+            var pool = new GachaPoolMetadata
+            {
+                Version = reader.GetString(0),
+                Start = reader.GetString(1),
+                End = reader.GetString(2),
+                Items = upItems.Select(itemId => new GachaPoolItem { ItemId = itemId }).ToList()
+            };
+            pools.Add(pool);
+        }
+
+        return pools;
+    }
+
+    private bool HasPoolMetadataCache()
+    {
+        try
+        {
+            using var connection = new SqliteConnection(_dbConnectionString);
+            connection.Open();
+            var command = connection.CreateCommand();
+            command.CommandText = "SELECT COUNT(*) FROM GachaPoolMetadata";
+            var count = Convert.ToInt32(command.ExecuteScalar());
+            return count > 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private PityStatus DeterminePityStatus(GachaLogItem item, List<GachaPoolMetadata> pools, int pityCount, bool wasPreviousLost)
+    {
+        if (pools == null || pools.Count == 0)
+            return PityStatus.None;
+
+        if (!DateTime.TryParse(item.Time, out var pullTime))
+            return PityStatus.None;
+
+        var pool = pools.FirstOrDefault(p =>
+        {
+            if (!DateTime.TryParse(p.Start, out var startTime) ||
+                !DateTime.TryParse(p.End, out var endTime))
+                return false;
+            return pullTime >= startTime && pullTime <= endTime;
+        });
+
+        if (pool == null)
+            return PityStatus.None;
+
+        var isUpItem = pool.Items.Any(p => p.ItemId.ToString() == item.ItemId);
+
+        if (item.RankType == "5")
+        {
+            if (isUpItem)
+            {
+                return wasPreviousLost ? PityStatus.Guaranteed : PityStatus.SmallPity;
+            }
+            else
+            {
+                return PityStatus.LostPity;
+            }
+        }
+        else if (item.RankType == "4" && isUpItem)
+        {
+            return PityStatus.Up;
+        }
+
+        return PityStatus.None;
+    }
+
+    partial void OnIsCharacterFourStarVisibleChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowCharacterNoRecords));
+        OnPropertyChanged(nameof(ShowCharacterFourDivider));
+    }
+
+    partial void OnIsWeaponFourStarVisibleChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowWeaponNoRecords));
+        OnPropertyChanged(nameof(ShowWeaponFourDivider));
+    }
+
+    partial void OnIsChronicledFourStarVisibleChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowChronicledNoRecords));
+        OnPropertyChanged(nameof(ShowChronicledFourDivider));
+    }
+
+    partial void OnIsStandardFourStarVisibleChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowStandardNoRecords));
+        OnPropertyChanged(nameof(ShowStandardFourDivider));
     }
 }

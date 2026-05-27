@@ -129,6 +129,10 @@ public class FiveStarRecord
     {
         get; set;
     }
+    public string ItemId
+    {
+        get; set;
+    }
     public int PityUsed
     {
         get; set;
@@ -141,4 +145,50 @@ public class FiveStarRecord
     {
         get; set;
     }
+    public bool WasPreviousLost
+    {
+        get; set;
+    }
+}
+
+public class GachaPoolItem
+{
+    [JsonPropertyName("itemId")]
+    public int ItemId { get; set; }
+
+    [JsonPropertyName("imageUrl")]
+    public string ImageUrl { get; set; }
+
+    [JsonPropertyName("itemType")]
+    public string ItemType { get; set; }
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; }
+
+    [JsonPropertyName("rankType")]
+    public int RankType { get; set; }
+}
+
+public class GachaPoolMetadata
+{
+    [JsonPropertyName("version")]
+    public string Version { get; set; }
+
+    [JsonPropertyName("start")]
+    public string Start { get; set; }
+
+    [JsonPropertyName("end")]
+    public string End { get; set; }
+
+    [JsonPropertyName("items")]
+    public List<GachaPoolItem> Items { get; set; } = new();
+}
+
+public enum PityStatus
+{
+    None,
+    SmallPity,
+    LostPity,
+    Guaranteed,
+    Up
 }

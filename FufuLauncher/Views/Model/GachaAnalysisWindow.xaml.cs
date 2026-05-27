@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Threading.Tasks;
 using FufuLauncher.Contracts.Services;
+using FufuLauncher.Models;
 using FufuLauncher.Services;
 using FufuLauncher.ViewModels;
 using Microsoft.UI;
@@ -39,6 +40,19 @@ namespace FufuLauncher.Converters
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotImplementedException();
+    }
+
+    public class PityStatusToVisibilityConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            if (value is PityStatus status && status != PityStatus.None)
+                return Visibility.Visible;
+            return Visibility.Collapsed;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+            => throw new NotImplementedException();
     }
 }
 

@@ -72,5 +72,7 @@
         public const string TelegramContactUrl = "https://t.me/Adimisra6717";
         public const string GithubWorkflowsApiUrl = "https://api.github.com/repos/CodeCubist/FufuLauncher/actions/workflows";
         public const string PaimonTimelineUrl = "https://paimon.moe/timeline";
+        public const string GachaCharacterMetadataUrl = "https://raw.githubusercontent.com/KeyPJ/FetchData/refs/heads/main/data/gacha/gi/character.json";
+        public const string GachaWeaponMetadataUrl = "https://raw.githubusercontent.com/KeyPJ/FetchData/refs/heads/main/data/gacha/gi/weapon.json";
     }
 }

@@ -20,6 +20,7 @@ public class GachaService
         { "302", "武器活动祈愿" },
         { "200", "常驻祈愿" },
         { "100", "新手祈愿" },
+        { "400", "角色活动祈愿" },
         { "500", "集录祈愿" }
     };
 
@@ -161,6 +162,7 @@ public class GachaService
                 stat.FiveStarRecords.Add(new FiveStarRecord
                 {
                     Name = item.Name,
+                    ItemId = item.ItemId,
                     PityUsed = pityCounter5,
                     Time = item.Time,
                     Rank = 5
@@ -173,6 +175,7 @@ public class GachaService
                 stat.FourStarRecords.Add(new FiveStarRecord
                 {
                     Name = item.Name,
+                    ItemId = item.ItemId,
                     PityUsed = pityCounter4,
                     Time = item.Time,
                     Rank = 4
