@@ -827,6 +827,8 @@ public partial class GachaAnalysisModel : ObservableObject
             foreach (var l in standardLogs) l.Uid = gameUid;
             _cachedStandardLogs = MergeLogs(_cachedStandardLogs, standardLogs);
 
+            FillMissingFieldsFromMetadata(charLogs, weaponLogs, standardLogs);
+
             var total = charLogs.Count + weaponLogs.Count + standardLogs.Count;
             CrawlerStatus = $"获取完成，共 {total} 条记录，正在检查图片资源...";
 
@@ -996,26 +998,9 @@ public partial class GachaAnalysisModel : ObservableObject
 
             CrawlerStatus = $"正在导入 {items.Count} 条记录...";
 
-            var metaByItemId = _savedMetadata
-                .Where(m => !string.IsNullOrEmpty(m.ItemId))
-                .GroupBy(m => m.ItemId)
-                .ToDictionary(g => g.Key, g => g.First());
-
             var newLogs = items.Select(uigfItem =>
             {
                 var gachaType = uigfItem.GachaType;
-
-                var name = uigfItem.Name;
-                if (string.IsNullOrEmpty(name) && metaByItemId.TryGetValue(uigfItem.ItemId, out var meta))
-                    name = meta.Name;
-                if (string.IsNullOrEmpty(name))
-                    name = uigfItem.ItemId;
-
-                var rankType = uigfItem.RankType;
-                if (string.IsNullOrEmpty(rankType) && metaByItemId.TryGetValue(uigfItem.ItemId, out meta) && !string.IsNullOrEmpty(meta.Rank))
-                    rankType = meta.Rank;
-                if (string.IsNullOrEmpty(rankType))
-                    rankType = "3";
 
                 var time = uigfItem.Time ?? "";
                 if (entryTimezone != 8 && !string.IsNullOrEmpty(time))
@@ -1038,13 +1023,14 @@ public partial class GachaAnalysisModel : ObservableObject
                     GachaType = gachaType,
                     ItemId = uigfItem.ItemId,
                     Time = time,
-                    Name = name,
-                    RankType = rankType,
+                    Name = uigfItem.Name,
+                    RankType = uigfItem.RankType,
                     ItemType = uigfItem.ItemType,
                     Lang = entryLang
                 };
             }).ToList();
 
+            FillMissingFieldsFromMetadata(newLogs);
             _cachedCharacterLogs = MergeLogs(_cachedCharacterLogs, newLogs.Where(x => GetNormalizedGachaType(x.GachaType) == "301").ToList());
             _cachedWeaponLogs = MergeLogs(_cachedWeaponLogs, newLogs.Where(x => GetNormalizedGachaType(x.GachaType) == "302").ToList());
             _cachedStandardLogs = MergeLogs(_cachedStandardLogs, newLogs.Where(x => GetNormalizedGachaType(x.GachaType) != "301" && GetNormalizedGachaType(x.GachaType) != "302").ToList());
@@ -1067,6 +1053,39 @@ public partial class GachaAnalysisModel : ObservableObject
         }
 
         if (!IsScraping) IsFetching = false;
+    }
+
+    private void FillMissingFieldsFromMetadata(params List<GachaLogItem>[] logLists)
+    {
+        if (_savedMetadata.Count == 0) return;
+        var byName = new Dictionary<string, ScrapedMetadata>();
+        var byItemId = new Dictionary<string, ScrapedMetadata>();
+        foreach (var m in _savedMetadata)
+        {
+            if (!string.IsNullOrEmpty(m.Name) && !string.IsNullOrEmpty(m.ItemId))
+                byName[m.Name] = m;
+            if (!string.IsNullOrEmpty(m.ItemId))
+                byItemId[m.ItemId] = m;
+        }
+
+        foreach (var logs in logLists)
+        {
+            foreach (var log in logs)
+            {
+                if (string.IsNullOrEmpty(log.ItemId) && !string.IsNullOrEmpty(log.Name)
+                    && byName.TryGetValue(log.Name, out var byNameMeta))
+                    log.ItemId = byNameMeta.ItemId;
+
+                if (string.IsNullOrEmpty(log.Name) && !string.IsNullOrEmpty(log.ItemId)
+                    && byItemId.TryGetValue(log.ItemId, out var byIdMeta))
+                    log.Name = byIdMeta.Name;
+
+                if (string.IsNullOrEmpty(log.RankType) && !string.IsNullOrEmpty(log.ItemId)
+                    && byItemId.TryGetValue(log.ItemId, out var byIdRankMeta)
+                    && !string.IsNullOrEmpty(byIdRankMeta.Rank))
+                    log.RankType = byIdRankMeta.Rank;
+            }
+        }
     }
 
     private static string GetNormalizedGachaType(string gachaType) => gachaType switch
@@ -1135,6 +1154,8 @@ public partial class GachaAnalysisModel : ObservableObject
             _cachedCharacterLogs = MergeLogs(_cachedCharacterLogs, charLogs);
             _cachedWeaponLogs = MergeLogs(_cachedWeaponLogs, weaponLogs);
             _cachedStandardLogs = MergeLogs(_cachedStandardLogs, standardLogs);
+
+            FillMissingFieldsFromMetadata(charLogs, weaponLogs, standardLogs);
 
             var total = charLogs.Count + weaponLogs.Count + standardLogs.Count;
             CrawlerStatus = $"获取完成，共 {total} 条记录，正在检查图片资源...";
