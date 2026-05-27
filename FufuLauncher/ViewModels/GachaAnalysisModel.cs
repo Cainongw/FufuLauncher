@@ -48,6 +48,7 @@ public partial class GachaAnalysisModel : ObservableObject
 
     private List<GachaLogItem> _cachedCharacterLogs = new();
     private List<GachaLogItem> _cachedWeaponLogs = new();
+    private List<GachaLogItem> _cachedChronicledLogs = new();
     private List<GachaLogItem> _cachedStandardLogs = new();
     private List<ScrapedMetadata> _savedMetadata = new();
     private string _currentUid = "";
@@ -59,13 +60,16 @@ public partial class GachaAnalysisModel : ObservableObject
     [ObservableProperty] private bool _isScraping;
     [ObservableProperty] private GachaStatistic _characterStats = new() { PoolName = "角色活动" };
     [ObservableProperty] private GachaStatistic _weaponStats = new() { PoolName = "武器活动" };
+    [ObservableProperty] private GachaStatistic _chronicledStats = new() { PoolName = "集录祈愿" };
     [ObservableProperty] private GachaStatistic _standardStats = new() { PoolName = "常驻祈愿" };
 
     [ObservableProperty] private ObservableCollection<GachaDisplayItem> _characterFiveStars = new();
     [ObservableProperty] private ObservableCollection<GachaDisplayItem> _weaponFiveStars = new();
+    [ObservableProperty] private ObservableCollection<GachaDisplayItem> _chronicledFiveStars = new();
     [ObservableProperty] private ObservableCollection<GachaDisplayItem> _standardFiveStars = new();
     [ObservableProperty] private ObservableCollection<GachaDisplayItem> _characterFourStars = new();
     [ObservableProperty] private ObservableCollection<GachaDisplayItem> _weaponFourStars = new();
+    [ObservableProperty] private ObservableCollection<GachaDisplayItem> _chronicledFourStars = new();
     [ObservableProperty] private ObservableCollection<GachaDisplayItem> _standardFourStars = new();
     
     [ObservableProperty] private ObservableCollection<ScrapedMetadata> _characterMetadataPreview = new();
@@ -77,6 +81,7 @@ public partial class GachaAnalysisModel : ObservableObject
     // 添加四星视图的控制开关
     [ObservableProperty] private bool _isCharacterFourStarVisible;
     [ObservableProperty] private bool _isWeaponFourStarVisible;
+    [ObservableProperty] private bool _isChronicledFourStarVisible;
     [ObservableProperty] private bool _isStandardFourStarVisible;
 
     public const string AddNewUserItem = "＋ 添加新用户";
@@ -317,6 +322,7 @@ public partial class GachaAnalysisModel : ObservableObject
     {
         _cachedCharacterLogs.Clear();
         _cachedWeaponLogs.Clear();
+        _cachedChronicledLogs.Clear();
         _cachedStandardLogs.Clear();
 
         if (string.IsNullOrEmpty(uid)) return;
@@ -347,9 +353,10 @@ public partial class GachaAnalysisModel : ObservableObject
                 var gt = GetNormalizedGachaType(item.GachaType);
                 if (gt == "301") _cachedCharacterLogs.Add(item);
                 else if (gt == "302") _cachedWeaponLogs.Add(item);
+                else if (gt == "500") _cachedChronicledLogs.Add(item);
                 else _cachedStandardLogs.Add(item);
             }
-            Debug.WriteLine($"[Gacha] 加载完成 UID={uid}: 角色{_cachedCharacterLogs.Count} 武器{_cachedWeaponLogs.Count} 常驻{_cachedStandardLogs.Count}");
+            Debug.WriteLine($"[Gacha] 加载完成 UID={uid}: 角色{_cachedCharacterLogs.Count} 武器{_cachedWeaponLogs.Count} 集录{_cachedChronicledLogs.Count} 常驻{_cachedStandardLogs.Count}");
         }
         catch (Exception ex)
         {
@@ -362,7 +369,7 @@ public partial class GachaAnalysisModel : ObservableObject
         if (string.IsNullOrEmpty(_currentUid)) { Debug.WriteLine("[Gacha] SaveGachaLogsToDb: _currentUid 为空，跳过保存"); return; }
         try
         {
-            var totalBefore = _cachedCharacterLogs.Count + _cachedWeaponLogs.Count + _cachedStandardLogs.Count;
+                var totalBefore = _cachedCharacterLogs.Count + _cachedWeaponLogs.Count + _cachedChronicledLogs.Count + _cachedStandardLogs.Count;
             Debug.WriteLine($"[Gacha] SaveGachaLogsToDb: 开始保存 UID={_currentUid}, 共 {totalBefore} 条记录");
             using var connection = new SqliteConnection(_dbConnectionString);
             connection.Open();
@@ -407,6 +414,7 @@ public partial class GachaAnalysisModel : ObservableObject
 
             InsertItems(_cachedCharacterLogs);
             InsertItems(_cachedWeaponLogs);
+            InsertItems(_cachedChronicledLogs);
             InsertItems(_cachedStandardLogs);
             transaction.Commit();
             Debug.WriteLine($"[Gacha] 保存完成 UID={_currentUid}: 角色{_cachedCharacterLogs.Count} 武器{_cachedWeaponLogs.Count} 常驻{_cachedStandardLogs.Count}");
@@ -683,6 +691,7 @@ public partial class GachaAnalysisModel : ObservableObject
     {
         var charLogs = _cachedCharacterLogs.OrderBy(x => x.Id).ToList();
         var weaponLogs = _cachedWeaponLogs.OrderBy(x => x.Id).ToList();
+        var chronicledLogs = _cachedChronicledLogs.OrderBy(x => x.Id).ToList();
         var standardLogs = _cachedStandardLogs.OrderBy(x => x.Id).ToList();
 
         var version = ++_refreshVersion;
@@ -691,12 +700,15 @@ public partial class GachaAnalysisModel : ObservableObject
         {
             var charStats = _gachaService.AnalyzePool("301", charLogs);
             var weaponStats = _gachaService.AnalyzePool("302", weaponLogs);
+            var chronicledStats = _gachaService.AnalyzePool("500", chronicledLogs);
             var standardStats = _gachaService.AnalyzePool("200", standardLogs);
 
             var charFive = BuildDisplayCollection(charStats.FiveStarRecords, "角色");
             var charFour = BuildDisplayCollection(charStats.FourStarRecords, "角色");
             var weaponFive = BuildDisplayCollection(weaponStats.FiveStarRecords, "武器");
             var weaponFour = BuildDisplayCollection(weaponStats.FourStarRecords, "武器");
+            var chronicledFive = BuildDisplayCollection(chronicledStats.FiveStarRecords, "集录");
+            var chronicledFour = BuildDisplayCollection(chronicledStats.FourStarRecords, "集录");
             var standardFive = BuildDisplayCollection(standardStats.FiveStarRecords, "常驻");
             var standardFour = BuildDisplayCollection(standardStats.FourStarRecords, "常驻");
 
@@ -706,11 +718,14 @@ public partial class GachaAnalysisModel : ObservableObject
 
                 CharacterStats = charStats;
                 WeaponStats = weaponStats;
+                ChronicledStats = chronicledStats;
                 StandardStats = standardStats;
                 CharacterFiveStars = charFive;
                 CharacterFourStars = charFour;
                 WeaponFiveStars = weaponFive;
                 WeaponFourStars = weaponFour;
+                ChronicledFiveStars = chronicledFive;
+                ChronicledFourStars = chronicledFour;
                 StandardFiveStars = standardFive;
                 StandardFourStars = standardFour;
 
@@ -735,6 +750,7 @@ public partial class GachaAnalysisModel : ObservableObject
         _currentUid = "";
         _cachedCharacterLogs.Clear();
         _cachedWeaponLogs.Clear();
+        _cachedChronicledLogs.Clear();
         _cachedStandardLogs.Clear();
 
         App.MainWindow.DispatcherQueue.TryEnqueue(() =>
@@ -743,6 +759,7 @@ public partial class GachaAnalysisModel : ObservableObject
             ClearCollections();
             CharacterStats = new GachaStatistic { PoolName = "角色活动" };
             WeaponStats = new GachaStatistic { PoolName = "武器活动" };
+            ChronicledStats = new GachaStatistic { PoolName = "集录祈愿" };
             StandardStats = new GachaStatistic { PoolName = "常驻祈愿" };
             HasGachaData = false;
             CrawlerStatus = "等待获取数据...";
@@ -832,14 +849,19 @@ public partial class GachaAnalysisModel : ObservableObject
             foreach (var l in weaponLogs) l.Uid = gameUid;
             _cachedWeaponLogs = MergeLogs(_cachedWeaponLogs, weaponLogs);
 
-            CrawlerStatus = $"武器活动 {weaponLogs.Count} 条，正在获取常驻祈愿记录...";
+            CrawlerStatus = $"武器活动 {weaponLogs.Count} 条，正在获取集录祈愿记录...";
+            var chronicledLogs = await _gachaService.FetchGachaLogAsync(baseUrl, "500", count => OnProgress("集录祈愿", count));
+            foreach (var l in chronicledLogs) l.Uid = gameUid;
+            _cachedChronicledLogs = MergeLogs(_cachedChronicledLogs, chronicledLogs);
+
+            CrawlerStatus = $"集录祈愿 {chronicledLogs.Count} 条，正在获取常驻祈愿记录...";
             var standardLogs = await _gachaService.FetchGachaLogAsync(baseUrl, "200", count => OnProgress("常驻祈愿", count));
             foreach (var l in standardLogs) l.Uid = gameUid;
             _cachedStandardLogs = MergeLogs(_cachedStandardLogs, standardLogs);
 
-            FillMissingFieldsFromMetadata(charLogs, weaponLogs, standardLogs);
+            FillMissingFieldsFromMetadata(charLogs, weaponLogs, chronicledLogs, standardLogs);
 
-            var total = charLogs.Count + weaponLogs.Count + standardLogs.Count;
+            var total = charLogs.Count + weaponLogs.Count + chronicledLogs.Count + standardLogs.Count;
             CrawlerStatus = $"获取完成，共 {total} 条记录，正在检查图片资源...";
 
             RefreshUIFromCache();
@@ -865,7 +887,7 @@ public partial class GachaAnalysisModel : ObservableObject
     {
         try
         {
-            var allLogs = _cachedCharacterLogs.Concat(_cachedWeaponLogs).Concat(_cachedStandardLogs).ToList();
+            var allLogs = _cachedCharacterLogs.Concat(_cachedWeaponLogs).Concat(_cachedChronicledLogs).Concat(_cachedStandardLogs).ToList();
             if (allLogs.Count == 0)
             {
                 OnErrorAction?.Invoke("没有可导出的抽卡记录");
@@ -1043,7 +1065,8 @@ public partial class GachaAnalysisModel : ObservableObject
             FillMissingFieldsFromMetadata(newLogs);
             _cachedCharacterLogs = MergeLogs(_cachedCharacterLogs, newLogs.Where(x => GetNormalizedGachaType(x.GachaType) == "301").ToList());
             _cachedWeaponLogs = MergeLogs(_cachedWeaponLogs, newLogs.Where(x => GetNormalizedGachaType(x.GachaType) == "302").ToList());
-            _cachedStandardLogs = MergeLogs(_cachedStandardLogs, newLogs.Where(x => GetNormalizedGachaType(x.GachaType) != "301" && GetNormalizedGachaType(x.GachaType) != "302").ToList());
+            _cachedChronicledLogs = MergeLogs(_cachedChronicledLogs, newLogs.Where(x => GetNormalizedGachaType(x.GachaType) == "500").ToList());
+            _cachedStandardLogs = MergeLogs(_cachedStandardLogs, newLogs.Where(x => GetNormalizedGachaType(x.GachaType) != "301" && GetNormalizedGachaType(x.GachaType) != "302" && GetNormalizedGachaType(x.GachaType) != "500").ToList());
 
             RefreshUIFromCache();
             HasGachaData = true;
@@ -1151,10 +1174,13 @@ public partial class GachaAnalysisModel : ObservableObject
             CrawlerStatus = $"角色活动 {charLogs.Count} 条，正在获取武器活动记录...";
             var weaponLogs = await _gachaService.FetchGachaLogAsync(baseUrl, "302", count => OnProgress("武器活动", count));
 
-            CrawlerStatus = $"武器活动 {weaponLogs.Count} 条，正在获取常驻祈愿记录...";
+            CrawlerStatus = $"武器活动 {weaponLogs.Count} 条，正在获取集录祈愿记录...";
+            var chronicledLogs = await _gachaService.FetchGachaLogAsync(baseUrl, "500", count => OnProgress("集录祈愿", count));
+
+            CrawlerStatus = $"集录祈愿 {chronicledLogs.Count} 条，正在获取常驻祈愿记录...";
             var standardLogs = await _gachaService.FetchGachaLogAsync(baseUrl, "200", count => OnProgress("常驻祈愿", count));
 
-            var allFetched = charLogs.Concat(weaponLogs).Concat(standardLogs).ToList();
+            var allFetched = charLogs.Concat(weaponLogs).Concat(chronicledLogs).Concat(standardLogs).ToList();
             var fetchedUid = allFetched.FirstOrDefault(l => !string.IsNullOrEmpty(l.Uid))?.Uid ?? "";
 
             if (!await HandleUidMismatchAsync(fetchedUid)) { IsFetching = false; return; }
@@ -1163,11 +1189,12 @@ public partial class GachaAnalysisModel : ObservableObject
 
             _cachedCharacterLogs = MergeLogs(_cachedCharacterLogs, charLogs);
             _cachedWeaponLogs = MergeLogs(_cachedWeaponLogs, weaponLogs);
+            _cachedChronicledLogs = MergeLogs(_cachedChronicledLogs, chronicledLogs);
             _cachedStandardLogs = MergeLogs(_cachedStandardLogs, standardLogs);
 
-            FillMissingFieldsFromMetadata(charLogs, weaponLogs, standardLogs);
+            FillMissingFieldsFromMetadata(charLogs, weaponLogs, chronicledLogs, standardLogs);
 
-            var total = charLogs.Count + weaponLogs.Count + standardLogs.Count;
+            var total = charLogs.Count + weaponLogs.Count + chronicledLogs.Count + standardLogs.Count;
             CrawlerStatus = $"获取完成，共 {total} 条记录，正在检查图片资源...";
 
             RefreshUIFromCache();
