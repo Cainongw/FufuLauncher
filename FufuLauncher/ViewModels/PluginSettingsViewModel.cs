@@ -229,75 +229,63 @@ public partial class PluginSettingsViewModel : ObservableObject
         }
     }
 
-private void CheckPluginStates()
-{
-    string fpsDir = Path.Combine(AppContext.BaseDirectory, "Plugins", "FPS");
-    string fpsEnabledPath = Path.Combine(fpsDir, "FPS.dll");
-    string fpsDisabledPath = Path.Combine(fpsDir, "FPS.disabled");
-    
-    string avatarDir = Path.Combine(AppContext.BaseDirectory, "Plugins", "Avatar");
-    string avatarEnabledPath = Path.Combine(avatarDir, "Avatar.dll");
-    string avatarDisabledPath = Path.Combine(avatarDir, "Avatar.disabled");
-    
-    string mainDir = Path.Combine(AppContext.BaseDirectory, "Plugins", "FuFuPlugin");
-    string mainEnabledPath = Path.Combine(mainDir, "FufuLauncher.UnlockerIsland.dll");
-    string mainDisabledPath = Path.Combine(mainDir, "FufuLauncher.UnlockerIsland.disabled");
-
-    if (File.Exists(mainEnabledPath) && File.Exists(mainDisabledPath))
+    private void CheckPluginStates()
     {
-        try 
-        { 
-            File.Delete(mainDisabledPath); 
-        } 
-        catch {}
-    }
-
-    _isMainPluginEnabled = !File.Exists(mainDisabledPath);
-    OnPropertyChanged(nameof(IsMainPluginEnabled));
-
-    if (File.Exists(fpsEnabledPath) && File.Exists(fpsDisabledPath))
-    {
-        try 
-        { 
-            File.Delete(fpsDisabledPath); 
-        } 
-        catch {}
-    }
-    
-    if (File.Exists(avatarEnabledPath) && File.Exists(avatarDisabledPath))
-    {
-        try 
-        { 
-            File.Delete(avatarDisabledPath); 
-        } 
-        catch {}
-    }
-
-    bool fpsEnabled = File.Exists(fpsEnabledPath);
-    bool avatarEnabled = File.Exists(avatarEnabledPath);
-
-    if (fpsEnabled && avatarEnabled)
-    {
-        try
-        {
-            File.Move(fpsEnabledPath, fpsDisabledPath);
-            File.Move(avatarEnabledPath, avatarDisabledPath);
-        }
-        catch {}
+        string fpsDir = Path.Combine(AppContext.BaseDirectory, "Plugins", "FPS");
+        string fpsEnabledPath = Path.Combine(fpsDir, "FPS.dll");
+        string fpsDisabledPath = Path.Combine(fpsDir, "FPS.disabled");
         
-        _isFpsPluginEnabled = false;
-        _isAvatarPluginEnabled = false;
-    }
-    else
-    {
-        _isFpsPluginEnabled = fpsEnabled;
-        _isAvatarPluginEnabled = avatarEnabled;
-    }
+        string avatarDir = Path.Combine(AppContext.BaseDirectory, "Plugins", "Avatar");
+        string avatarEnabledPath = Path.Combine(avatarDir, "Avatar.dll");
+        string avatarDisabledPath = Path.Combine(avatarDir, "Avatar.disabled");
+        
+        string mainDir = Path.Combine(AppContext.BaseDirectory, "Plugins", "FuFuPlugin");
+        string mainEnabledPath = Path.Combine(mainDir, "FufuLauncher.UnlockerIsland.dll");
+        string mainDisabledPath = Path.Combine(mainDir, "FufuLauncher.UnlockerIsland.disabled");
 
-    OnPropertyChanged(nameof(IsFpsPluginEnabled));
-    OnPropertyChanged(nameof(IsAvatarPluginEnabled));
-    RefreshUIState();
-}
+        if (File.Exists(mainEnabledPath) && File.Exists(mainDisabledPath))
+        {
+            try { File.Delete(mainDisabledPath); } catch { }
+        }
+    
+        _isMainPluginEnabled = !File.Exists(mainDisabledPath);
+        OnPropertyChanged(nameof(IsMainPluginEnabled));
+
+        if (File.Exists(fpsEnabledPath) && File.Exists(fpsDisabledPath))
+        {
+            try { File.Delete(fpsDisabledPath); } catch { }
+        }
+        
+        if (File.Exists(avatarEnabledPath) && File.Exists(avatarDisabledPath))
+        {
+            try { File.Delete(avatarDisabledPath); } catch { }
+        }
+
+        bool fpsEnabled = File.Exists(fpsEnabledPath);
+        bool avatarEnabled = File.Exists(avatarEnabledPath);
+
+        if (fpsEnabled && avatarEnabled)
+        {
+            try
+            {
+                File.Move(fpsEnabledPath, fpsDisabledPath);
+                File.Move(avatarEnabledPath, avatarDisabledPath);
+            }
+            catch { }
+            
+            _isFpsPluginEnabled = false;
+            _isAvatarPluginEnabled = false;
+        }
+        else
+        {
+            _isFpsPluginEnabled = fpsEnabled;
+            _isAvatarPluginEnabled = avatarEnabled;
+        }
+
+        OnPropertyChanged(nameof(IsFpsPluginEnabled));
+        OnPropertyChanged(nameof(IsAvatarPluginEnabled));
+        RefreshUIState();
+    }
 
 public async Task TriggerBackgroundAuthCheckAsync()
 {
@@ -554,12 +542,7 @@ public async Task TriggerBackgroundAuthCheckAsync()
         }
         catch (Exception ex)
         {
-            WeakReferenceMessenger.Default.Send(new NotificationMessage(
-                "目录创建失败",
-                $"无法创建预设配置目录，请检查是否需要管理员权限。\n详细信息: {ex.Message}",
-                NotificationType.Error,
-                6000
-            ));
+            System.Diagnostics.Debug.WriteLine($"目录创建失败: {ex.Message}");
         }
         
         var localSettings = App.GetService<FufuLauncher.Contracts.Services.ILocalSettingsService>();
@@ -578,10 +561,9 @@ public async Task TriggerBackgroundAuthCheckAsync()
             _isAutoCreatePresetEnabled = autoCreateTask.Result == null || Convert.ToBoolean(autoCreateTask.Result);
         }
 
+        // 纯同步本地加载，[DEV] 默认不加载
         LoadConfiguration();
         UpdateAvatarPreview();
-        
-        _ = TriggerBackgroundAuthCheckAsync();
     }
     
     private async Task InitializeAuthAndReloadAsync()
@@ -703,78 +685,120 @@ public async Task TriggerBackgroundAuthCheckAsync()
     }
 
 public void LoadConfiguration()
-{
-    Settings.Clear();
-
-    if (SelectedPluginIndex == 2)
     {
-        PluginName = "千星奇域头像替换";
-        PluginDescription = "注意：开启此功能会自动禁用FPS插件，两者不可同时开启，替换头像是永久性的";
-        PluginDeveloper = "不可用";
-        LastModifiedDate = "不可用";
-        AvailablePresets.Clear();
-        CurrentPreset = null;
-        return;
-    }
+        Settings.Clear();
 
-    if (!File.Exists(_iniPath))
-    {
-        PluginName = SelectedPluginIndex == 0 ? "未安装 FuFuPlugin" : "未安装 FPS 插件";
-        PluginDescription = "请确保Plugins目录下存在对应的文件夹及config.ini文件";
-        return;
-    }
-
-    try
-    {
-        var fileInfo = new FileInfo(_iniPath);
-        LastModifiedDate = fileInfo.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss");
-
-        var configData = _iniFile.ReadAll();
-        if (configData.TryGetValue("General", out var generalSection))
+        if (SelectedPluginIndex == 2)
         {
-            PluginName = generalSection.GetValueOrDefault("Name", "未知插件");
-            PluginDescription = generalSection.GetValueOrDefault("Description", "无描述");
-            PluginDeveloper = generalSection.GetValueOrDefault("Developer", "未知作者");
+            PluginName = "千星奇域头像替换";
+            PluginDescription = "注意：开启此功能会自动禁用FPS插件，两者不可同时开启，替换头像是永久性的";
+            PluginDeveloper = "不可用";
+            LastModifiedDate = "不可用";
+            AvailablePresets.Clear();
+            CurrentPreset = null;
+            return;
         }
 
-        ManagePresets(configData);
-
-        bool isDevZone = false;
-        foreach (var section in _iniFile.ReadAll())
+        if (!File.Exists(_iniPath))
         {
-            if (section.Key.Equals("General", StringComparison.OrdinalIgnoreCase)) continue;
+            PluginName = SelectedPluginIndex == 0 ? "未安装 FuFuPlugin" : "未安装 FPS 插件";
+            PluginDescription = "请确保Plugins目录下存在对应的文件夹及config.ini文件";
+            return;
+        }
 
-            if (section.Key.Equals("DEV", StringComparison.OrdinalIgnoreCase))
+        try
+        {
+            var fileInfo = new FileInfo(_iniPath);
+            LastModifiedDate = fileInfo.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss");
+
+            var configData = _iniFile.ReadAll();
+            if (configData.TryGetValue("General", out var generalSection))
             {
-                isDevZone = true;
-                continue;
-            }
-            
-            if (isDevZone && !_isHwidAuthorized)
-            {
-                continue;
+                PluginName = generalSection.GetValueOrDefault("Name", "未知插件");
+                PluginDescription = generalSection.GetValueOrDefault("Description", "无描述");
+                PluginDeveloper = generalSection.GetValueOrDefault("Developer", "未知作者");
             }
 
-            var dic = section.Value;
-            var name = dic.GetValueOrDefault("Name", section.Key);
-            var type = dic.GetValueOrDefault("Type", "string");
-            var value = dic.GetValueOrDefault("Value", "");
-            var help = dic.GetValueOrDefault("help", "");
-            
-            var settingItem = new PluginSettingItem(_iniFile, section.Key, name, type, value, help, OnSettingValueChanged, UseKeyListInput);
-            Settings.Add(settingItem);
+            ManagePresets(configData);
+
+            bool isDevZone = false;
+            foreach (var section in _iniFile.ReadAll())
+            {
+                if (section.Key.Equals("General", StringComparison.OrdinalIgnoreCase)) continue;
+
+                if (section.Key.Equals("DEV", StringComparison.OrdinalIgnoreCase))
+                {
+                    isDevZone = true;
+                    continue;
+                }
+
+                if (isDevZone && !_isHwidAuthorized)
+                {
+                    continue;
+                }
+
+                var dic = section.Value;
+                var name = dic.GetValueOrDefault("Name", section.Key);
+                var type = dic.GetValueOrDefault("Type", "string");
+                var value = dic.GetValueOrDefault("Value", "");
+                var help = dic.GetValueOrDefault("help", "");
+                
+                var settingItem = new PluginSettingItem(_iniFile, section.Key, name, type, value, help, OnSettingValueChanged, UseKeyListInput);
+                Settings.Add(settingItem);
+            }
+        }
+        catch (Exception ex)
+        {
+            WeakReferenceMessenger.Default.Send(new NotificationMessage(
+                "配置读取失败",
+                $"无法读取插件配置文件。\n详细信息: {ex.Message}",
+                NotificationType.Error,
+                6000
+            ));
         }
     }
-    catch (Exception ex)
+
+    public async Task StartAsynchronousAuthAsync()
     {
-        WeakReferenceMessenger.Default.Send(new NotificationMessage(
-            "配置读取失败",
-            $"无法读取插件配置文件。\n详细信息: {ex.Message}",
-            NotificationType.Error,
-            6000
-        ));
+        bool isAuthorized = await CheckHwidAuthorizationAsync();
+        
+        var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+        if (dispatcher != null)
+        {
+            dispatcher.TryEnqueue(() => HandleAuthResult(isAuthorized));
+        }
+        else
+        {
+            HandleAuthResult(isAuthorized);
+        }
     }
-}
+    
+    private void HandleAuthResult(bool isAuthorized)
+    {
+        if (isAuthorized)
+        {
+            LoadConfiguration();
+        }
+        else
+        {
+            string avatarDir = Path.Combine(AppContext.BaseDirectory, "Plugins", "Avatar");
+            string avatarEnabledPath = Path.Combine(avatarDir, "Avatar.dll");
+            string avatarDisabledPath = Path.Combine(avatarDir, "Avatar.disabled");
+
+            if (File.Exists(avatarEnabledPath))
+            {
+                try
+                {
+                    File.Move(avatarEnabledPath, avatarDisabledPath);
+                }
+                catch { }
+                
+                _isAvatarPluginEnabled = false;
+                OnPropertyChanged(nameof(IsAvatarPluginEnabled));
+                RefreshUIState();
+            }
+        }
+    }
 
     private void ManagePresets(Dictionary<string, Dictionary<string, string>> currentIniData)
 {

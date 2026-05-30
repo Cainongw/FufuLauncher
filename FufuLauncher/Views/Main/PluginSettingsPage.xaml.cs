@@ -24,6 +24,7 @@ public sealed partial class PluginSettingsPage : Page
     
     private bool _hasShownFpsWarning = false;
     private bool _isEnforcingFpsDisable = false;
+    private bool _isInitializing = true;
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetActiveWindow();
@@ -114,6 +115,10 @@ public sealed partial class PluginSettingsPage : Page
             SettingsOverlay.Visibility = Visibility.Visible;
             SettingsOverlay.Opacity = 1;
         }
+        
+        _isInitializing = false;
+        
+        _ = ViewModel.StartAsynchronousAuthAsync();
     }
     
     private void OnOpenSponsorWindowClick(object sender, RoutedEventArgs e)
@@ -233,6 +238,8 @@ public sealed partial class PluginSettingsPage : Page
     
     private async void ViewModel_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
+        if (_isInitializing) return;
+
         if (e.PropertyName == nameof(ViewModel.SettingsOverlayVisibility))
         {
             if (ViewModel.SettingsOverlayVisibility == Visibility.Visible)

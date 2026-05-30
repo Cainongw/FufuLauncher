@@ -6,6 +6,8 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Media.Core;
 using Windows.Storage;
+using FufuLauncher.Messages;
+using CommunityToolkit.Mvvm.Messaging;
 
 public class BackgroundItem
 {
@@ -48,6 +50,33 @@ namespace FufuLauncher.Services.Background
         private static readonly HttpClient _httpClient;
 
         private readonly SemaphoreSlim _loadLock = new(1, 1);
+        
+        private int _downloadingCount = 0;
+        private readonly object _downloadStateLock = new object();
+        
+        private void NotifyDownloadStarted()
+        {
+            lock (_downloadStateLock)
+            {
+                _downloadingCount++;
+                if (_downloadingCount == 1)
+                {
+                    WeakReferenceMessenger.Default.Send(new BackgroundDownloadStateMessage(true));
+                }
+            }
+        }
+
+        private void NotifyDownloadFinished()
+        {
+            lock (_downloadStateLock)
+            {
+                _downloadingCount--;
+                if (_downloadingCount == 0)
+                {
+                    WeakReferenceMessenger.Default.Send(new BackgroundDownloadStateMessage(false));
+                }
+            }
+        }
 
         public async Task<BackgroundRenderResult> GetSpecificOnlineBackgroundAsync(string url, bool isVideo)
         {
@@ -247,85 +276,95 @@ namespace FufuLauncher.Services.Background
                 }
             }
 
-            Debug.WriteLine($"BackgroundRenderer: 开始下载视频: {videoUrl}");
-            var data = await _httpClient.GetByteArrayAsync(videoUrl);
-            Debug.WriteLine($"BackgroundRenderer: 下载完成，大小 {data.Length} bytes");
+            NotifyDownloadStarted();
+            try
+            {
+                Debug.WriteLine($"BackgroundRenderer: 开始下载视频: {videoUrl}");
+                var data = await _httpClient.GetByteArrayAsync(videoUrl);
+                Debug.WriteLine($"BackgroundRenderer: 下载完成，大小 {data.Length} bytes");
 
-            var tempFile = Path.Combine(_cacheFolderPath, $"{fileName}.tmp");
-            Directory.CreateDirectory(_cacheFolderPath);
-            await File.WriteAllBytesAsync(tempFile, data);
-            File.Move(tempFile, cachedFilePath, true);
+                var tempFile = Path.Combine(_cacheFolderPath, $"{fileName}.tmp");
+                Directory.CreateDirectory(_cacheFolderPath);
+                await File.WriteAllBytesAsync(tempFile, data);
+                File.Move(tempFile, cachedFilePath, true);
+            }
+            finally
+            {
+                NotifyDownloadFinished();
+            }
 
             var storageFile = await StorageFile.GetFileFromPathAsync(cachedFilePath);
             return MediaSource.CreateFromStorageFile(storageFile);
         }
 
-        private async Task<ImageSource> ProcessImageBackground(string imageUrl)
+private async Task<ImageSource> ProcessImageBackground(string imageUrl)
+{
+    var fileName = GetCacheFileName(imageUrl, ".img");
+    var cachedFilePath = Path.Combine(_cacheFolderPath, fileName);
+
+    if (File.Exists(cachedFilePath))
+    {
+        var fileInfo = new FileInfo(cachedFilePath);
+        if (fileInfo.Length > 1024)
         {
-            var fileName = GetCacheFileName(imageUrl, ".img");
-            var cachedFilePath = Path.Combine(_cacheFolderPath, fileName);
-
-            // 优先从文件缓存加载
-            if (File.Exists(cachedFilePath))
-            {
-                var fileInfo = new FileInfo(cachedFilePath);
-                if (fileInfo.Length > 1024)
-                {
-                    try
-                    {
-                        Debug.WriteLine($"BackgroundRenderer: 从文件缓存加载图片: {fileName}");
-                        var bitmap = new BitmapImage();
-                        using (var stream = File.OpenRead(cachedFilePath))
-                        {
-                            await bitmap.SetSourceAsync(stream.AsRandomAccessStream());
-                        }
-                        return bitmap;
-                    }
-                    catch
-                    {
-                        File.Delete(cachedFilePath);
-                        Debug.WriteLine($"BackgroundRenderer: 图片缓存损坏，已删除 {fileName}");
-                    }
-                }
-            }
-
-            // 缓存不存在，从网络下载
-            Debug.WriteLine($"BackgroundRenderer: 开始下载图片: {imageUrl}");
-            var data = await _httpClient.GetByteArrayAsync(imageUrl);
-            Debug.WriteLine($"BackgroundRenderer: 下载完成，大小 {data.Length} bytes");
-
-            // 保存到文件缓存
             try
             {
-                Directory.CreateDirectory(_cacheFolderPath);
-                var tempFile = Path.Combine(_cacheFolderPath, $"{fileName}.tmp");
-                await File.WriteAllBytesAsync(tempFile, data);
-                File.Move(tempFile, cachedFilePath, true);
-                Debug.WriteLine($"BackgroundRenderer: 图片已缓存到 {fileName}");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"BackgroundRenderer: 图片缓存写入失败: {ex.Message}");
-            }
-
-            // 从下载数据解码
-            var bitmapImage = new BitmapImage();
-            using (var stream = new MemoryStream(data))
-            {
-                try
+                Debug.WriteLine($"BackgroundRenderer: 从文件缓存加载图片: {fileName}");
+                var bitmap = new BitmapImage();
+                using (var stream = File.OpenRead(cachedFilePath))
                 {
-                    await bitmapImage.SetSourceAsync(stream.AsRandomAccessStream());
+                    await bitmap.SetSourceAsync(stream.AsRandomAccessStream());
                 }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"BackgroundRenderer: 图片解码失败(可能缺少 WebP 扩展): {ex.Message}");
-                    throw new NotSupportedException("IMAGE_DECODE_FAILED", ex);
-                }
+                return bitmap;
             }
-
-            Debug.WriteLine("BackgroundRenderer: BitmapImage 从流加载完成");
-            return bitmapImage;
+            catch
+            {
+                File.Delete(cachedFilePath);
+                Debug.WriteLine($"BackgroundRenderer: 图片缓存损坏，已删除 {fileName}");
+            }
         }
+    }
+
+    NotifyDownloadStarted();
+    byte[] data;
+    try
+    {
+        Debug.WriteLine($"BackgroundRenderer: 开始下载图片: {imageUrl}");
+        data = await _httpClient.GetByteArrayAsync(imageUrl);
+        Debug.WriteLine($"BackgroundRenderer: 下载完成，大小 {data.Length} bytes");
+
+        Directory.CreateDirectory(_cacheFolderPath);
+        var tempFile = Path.Combine(_cacheFolderPath, $"{fileName}.tmp");
+        await File.WriteAllBytesAsync(tempFile, data);
+        File.Move(tempFile, cachedFilePath, true);
+        Debug.WriteLine($"BackgroundRenderer: 图片已缓存到 {fileName}");
+    }
+    catch (Exception ex)
+    {
+        Debug.WriteLine($"BackgroundRenderer: 图片缓存写入失败: {ex.Message}");
+        throw;
+    }
+    finally
+    {
+        NotifyDownloadFinished();
+    }
+
+    var bitmapImage = new BitmapImage();
+    using (var stream = new MemoryStream(data))
+    {
+        try
+        {
+            await bitmapImage.SetSourceAsync(stream.AsRandomAccessStream());
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"BackgroundRenderer: 图片解码失败(可能缺少 WebP 扩展): {ex.Message}");
+            throw new NotSupportedException("IMAGE_DECODE_FAILED", ex);
+        }
+    }
+
+    return bitmapImage;
+}
 
         private string GetCacheFileName(string url, string defaultExtension = ".mp4")
         {
@@ -384,17 +423,24 @@ namespace FufuLauncher.Services.Background
 
                     if (File.Exists(cachedFilePath) && new FileInfo(cachedFilePath).Length > 1024)
                     {
-                        Debug.WriteLine($"BackgroundRenderer: 预加载跳过(已缓存): {fileName}");
                         return;
                     }
 
-                    Debug.WriteLine($"BackgroundRenderer: 预加载下载中: {url}");
-                    var data = await _httpClient.GetByteArrayAsync(url);
-                    Directory.CreateDirectory(_cacheFolderPath);
-                    var tempFile = Path.Combine(_cacheFolderPath, $"{fileName}.tmp");
-                    await File.WriteAllBytesAsync(tempFile, data);
-                    File.Move(tempFile, cachedFilePath, true);
-                    Debug.WriteLine($"BackgroundRenderer: 预加载完成: {fileName}");
+                    NotifyDownloadStarted();
+                    try
+                    {
+                        Debug.WriteLine($"BackgroundRenderer: 预加载下载中: {url}");
+                        var data = await _httpClient.GetByteArrayAsync(url);
+                        Directory.CreateDirectory(_cacheFolderPath);
+                        var tempFile = Path.Combine(_cacheFolderPath, $"{fileName}.tmp");
+                        await File.WriteAllBytesAsync(tempFile, data);
+                        File.Move(tempFile, cachedFilePath, true);
+                        Debug.WriteLine($"BackgroundRenderer: 预加载完成: {fileName}");
+                    }
+                    finally
+                    {
+                        NotifyDownloadFinished();
+                    }
                 }
                 catch (Exception ex)
                 {
