@@ -149,7 +149,8 @@
                       Grid.Column="1"
                       Padding="32,32,12,24"
                       VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollMode="Disabled">
+                      HorizontalScrollMode="Disabled"
+                      ViewChanged="SettingsScrollViewer_ViewChanged">
             <StackPanel Spacing="0">
                 
                 <Border x:Name="AppearanceItem" Style="{StaticResource SettingsCardStyle}">

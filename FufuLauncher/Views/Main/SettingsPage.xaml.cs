@@ -22,11 +22,6 @@ public sealed partial class SettingsPage : Page
         InitializeComponent();
     }
 
-    private void Page_Loaded(object sender, RoutedEventArgs e)
-    {
-        EntranceStoryboard.Begin();
-    }
-
     protected async override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
@@ -257,11 +252,46 @@ public sealed partial class SettingsPage : Page
         authWindow.Activate();
     }
 
+    private bool _isNavigatingFromMenu;
+    private DispatcherTimer? _navLockTimer;
+
+    private static readonly string[] _sectionTags =
+        { "AppearanceItem", "HomeTextItem", "LanguageItem", "LaunchConfigItem",
+          "BackgroundItem", "WindowEffectsItem", "StartupSoundItem",
+          "AdvancedOptionsItem", "UpdateItem", "AboutItem", "SecurityAuthItem" };
+
+    private void Page_Loaded(object sender, RoutedEventArgs e)
+    {
+        EntranceStoryboard.Begin();
+
+        _isNavigatingFromMenu = true;
+        if (SettingsNavigationView.SelectedItem == null)
+        {
+            SettingsNavigationView.SelectedItem = SettingsNavigationView.MenuItems.OfType<NavigationViewItem>().FirstOrDefault();
+        }
+        _isNavigatingFromMenu = false;
+    }
+
     private void SettingsNavigationView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
+        if (_isNavigatingFromMenu) return;
+
         if (args.SelectedItem is NavigationViewItem selectedItem &&
             selectedItem.Tag is string tag)
         {
+            _isNavigatingFromMenu = true;
+
+            // Safety net: clear lock if ViewChanged never fires
+            // (happens when element is already visible but can't scroll to top)
+            _navLockTimer?.Stop();
+            _navLockTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
+            _navLockTimer.Tick += (s, e) =>
+            {
+                ((DispatcherTimer)s).Stop();
+                _isNavigatingFromMenu = false;
+            };
+            _navLockTimer.Start();
+
             var element = FindName(tag) as FrameworkElement;
             if (element != null)
             {
@@ -282,6 +312,50 @@ public sealed partial class SettingsPage : Page
             }
         }
     }
+
+    private void SettingsScrollViewer_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
+    {
+        if (e.IsIntermediate) return;
+
+        // Scroll from nav click completed — release lock, skip sync
+        if (_isNavigatingFromMenu)
+        {
+            _navLockTimer?.Stop();
+            _isNavigatingFromMenu = false;
+            return;
+        }
+
+        var scrollViewer = (ScrollViewer)sender;
+        double anchor = scrollViewer.Padding.Top + 1;
+        var visibleTag = (string?)null;
+
+        foreach (var tag in _sectionTags)
+        {
+            var element = FindName(tag) as FrameworkElement;
+            if (element == null) continue;
+
+            var transform = element.TransformToVisual(scrollViewer);
+            var position = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
+
+            if (position.Y <= anchor)
+            {
+                visibleTag = tag;
+            }
+        }
+
+        if (visibleTag != null)
+        {
+            _isNavigatingFromMenu = true;
+            var targetItem = SettingsNavigationView.MenuItems
+                .OfType<NavigationViewItem>()
+                .FirstOrDefault(item => item.Tag?.ToString() == visibleTag);
+            if (targetItem != null && SettingsNavigationView.SelectedItem != targetItem)
+            {
+                SettingsNavigationView.SelectedItem = targetItem;
+            }
+            _isNavigatingFromMenu = false;
+        }
+    }
     private async void OnOpenHDRSettingsClick(object sender, RoutedEventArgs e)
     {
         var dialog = new GenshinHDRLuminanceSettingDialog();
@@ -295,8 +369,7 @@ public sealed partial class SettingsPage : Page
         var bringIntoViewOptions = new BringIntoViewOptions
         {
             AnimationDesired = true,
-            VerticalAlignmentRatio = 0.0,
-            VerticalOffset = -52
+            VerticalAlignmentRatio = 0.0
         };
 
         element.StartBringIntoView(bringIntoViewOptions);
