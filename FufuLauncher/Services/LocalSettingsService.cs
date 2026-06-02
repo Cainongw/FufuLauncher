@@ -133,15 +133,20 @@ namespace FufuLauncher.Services
             {
                 using var connection = new SqliteConnection($"Data Source={_dbPath};Pooling=False");
                 await connection.OpenAsync();
-                
+
                 var command = connection.CreateCommand();
                 command.CommandText = @"
                     CREATE TABLE IF NOT EXISTS Settings (
                         [Key] TEXT PRIMARY KEY,
                         [Value] TEXT
                     )";
-                
+
                 await command.ExecuteNonQueryAsync();
+
+                var cleanupCommand = connection.CreateCommand();
+                cleanupCommand.CommandText = @"
+                    DELETE FROM Settings WHERE [Key] IN ('AccountConfig', 'LabAccountConfig')";
+                await cleanupCommand.ExecuteNonQueryAsync();
             }
             catch (Exception ex)
             {
