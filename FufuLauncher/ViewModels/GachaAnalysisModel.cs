@@ -1374,7 +1374,16 @@ public partial class GachaAnalysisModel : ObservableObject
 
             if (total == 0)
             {
+                var hasExistingRecords = _cachedCharacterLogs.Count + _cachedWeaponLogs.Count + _cachedChronicledLogs.Count + _cachedNoviceLogs.Count + _cachedStandardLogs.Count > 0;
+
                 IsFetching = false;
+
+                if (hasExistingRecords)
+                {
+                    CrawlerStatus = $"UID {gameUid} 未获取到新记录，已保留现有数据";
+                    return;
+                }
+
                 _cachedCharacterLogs.Clear();
                 _cachedWeaponLogs.Clear();
                 _cachedChronicledLogs.Clear();
