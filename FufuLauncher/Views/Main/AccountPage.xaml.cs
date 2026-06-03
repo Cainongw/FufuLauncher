@@ -100,4 +100,23 @@ public sealed partial class AccountPage : Page
         var window = new GachaAnalysisWindow();
         window.Activate();
     }
+
+    private async void OnCopyGameUidClicked(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button button && button.Tag is string uid && !string.IsNullOrEmpty(uid))
+        {
+            var dataPackage = new Windows.ApplicationModel.DataTransfer.DataPackage();
+            dataPackage.SetText(uid);
+            Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dataPackage);
+
+            var icon = button.Content as FontIcon;
+            if (icon != null)
+            {
+                var originalGlyph = icon.Glyph;
+                icon.Glyph = "";
+                await Task.Delay(800);
+                icon.Glyph = originalGlyph;
+            }
+        }
+    }
 }

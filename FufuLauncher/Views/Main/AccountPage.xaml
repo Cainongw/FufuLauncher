@@ -452,6 +452,7 @@
                                                             <ColumnDefinition Width="Auto"/>
                                                             <ColumnDefinition Width="*"/>
                                                             <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="Auto"/>
                                                         </Grid.ColumnDefinitions>
 
                                                         <Border Width="40" Height="40" CornerRadius="20" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="1">
@@ -469,8 +470,18 @@
 
                                                         <TextBlock Grid.Column="2" Text="{Binding game_uid}"
                                                                    VerticalAlignment="Center"
+                                                                   Margin="0,0,6,0"
                                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                                                                    FontSize="12" FontFamily="Consolas, Monospace"/>
+
+                                                        <Button Grid.Column="3" Width="28" Height="28" Padding="0"
+                                                                Background="Transparent" BorderThickness="0"
+                                                                VerticalAlignment="Center"
+                                                                Tag="{Binding game_uid}"
+                                                                Click="OnCopyGameUidClicked"
+                                                                ToolTipService.ToolTip="复制 UID">
+                                                            <FontIcon Glyph="&#xE8C8;" FontSize="12" Foreground="{ThemeResource TextFillColorTertiaryBrush}"/>
+                                                        </Button>
                                                     </Grid>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
