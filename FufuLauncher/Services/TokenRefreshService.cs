@@ -166,7 +166,7 @@ public class TokenRefreshService
             var response = await _httpClient.SendAsync(request);
             var responseText = await response.Content.ReadAsStringAsync();
 
-            var result = JsonSerializer.Deserialize<MihoyoBBS.ApiResponse<MihoyoBBS.AccountInfoData>>(responseText, _jsonOptions);
+            var result = JsonSerializer.Deserialize<ApiResponse<AccountInfoData>>(responseText, _jsonOptions);
             
             if (result != null && result.RetCode == 0 && result.Data?.List != null && result.Data.List.Count > 0)
             {

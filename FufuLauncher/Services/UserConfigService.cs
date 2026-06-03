@@ -1,6 +1,7 @@
 ﻿using System.Text.Json;
 using FufuLauncher.Contracts.Services;
 using FufuLauncher.Models;
+using MihoyoBBS;
 
 namespace FufuLauncher.Services;
 
@@ -33,7 +34,7 @@ public class UserConfigService : IUserConfigService
             }
 
             var json = await File.ReadAllTextAsync(configPath);
-            var config = JsonSerializer.Deserialize<HoyoverseCheckinConfig>(json, new JsonSerializerOptions
+            var config = JsonSerializer.Deserialize<Config>(json, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             });
@@ -76,7 +77,7 @@ public class UserConfigService : IUserConfigService
             }
 
             var json = await File.ReadAllTextAsync(configPath);
-            var config = JsonSerializer.Deserialize<HoyoverseCheckinConfig>(json, new JsonSerializerOptions
+            var config = JsonSerializer.Deserialize<Config>(json, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             });

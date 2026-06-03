@@ -9,6 +9,7 @@ using Windows.Graphics.Imaging;
 using Windows.Storage.Streams;
 using Windows.UI;
 using FufuLauncher.Constants;
+using MihoyoBBS;
 
 namespace FufuLauncher.Views
 {
@@ -96,7 +97,7 @@ namespace FufuLauncher.Views
                 if (File.Exists(_userConfigPath))
                 {
                     string json = await File.ReadAllTextAsync(_userConfigPath);
-                    var config = JsonSerializer.Deserialize<HoyoverseCheckinConfig>(json);
+                    var config = JsonSerializer.Deserialize<Config>(json);
                     if (config?.Display != null && !string.IsNullOrEmpty(config.Display.GameUid))
                     {
                         _myUid = config.Display.GameUid;

@@ -15,6 +15,7 @@ using FufuLauncher.Models;
 using FufuLauncher.Models.UIGF;
 using FufuLauncher.Services;
 using Microsoft.Data.Sqlite;
+using MihoyoBBS;
 
 namespace FufuLauncher.ViewModels;
 
@@ -1257,7 +1258,7 @@ public partial class GachaAnalysisModel : ObservableObject
                 {
                     try
                     {
-                        var configObj = JsonSerializer.Deserialize<HoyoverseCheckinConfig>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        var configObj = JsonSerializer.Deserialize<Config>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                         if (configObj?.Account != null)
                         {
                             if (!string.IsNullOrEmpty(stoken)) configObj.Account.Stoken = stoken;

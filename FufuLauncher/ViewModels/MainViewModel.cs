@@ -28,6 +28,7 @@ namespace FufuLauncher.ViewModels
         private readonly IBackgroundRenderer _backgroundRenderer;
         private readonly ILocalSettingsService _localSettingsService;
         private readonly IHoyoverseCheckinService _checkinService;
+        private readonly IUnifiedCheckinService _unifiedCheckinService;
         private readonly IGameLauncherService _gameLauncherService;
         private readonly INotificationService _notificationService;
         private readonly DailyNoteCardService _dailyNoteCardService;
@@ -187,6 +188,7 @@ namespace FufuLauncher.ViewModels
             IBackgroundRenderer backgroundRenderer,
             ILocalSettingsService localSettingsService,
             IHoyoverseCheckinService checkinService,
+            IUnifiedCheckinService unifiedCheckinService,
             IGameLauncherService gameLauncherService,
             ILauncherService launcherService,
             INavigationService navigationService,
@@ -197,6 +199,7 @@ namespace FufuLauncher.ViewModels
             _backgroundRenderer = backgroundRenderer;
             _localSettingsService = localSettingsService;
             _checkinService = checkinService;
+            _unifiedCheckinService = unifiedCheckinService;
             _gameLauncherService = gameLauncherService;
             _notificationService = notificationService;
             _dailyNoteCardService = dailyNoteCardService;
@@ -946,14 +949,13 @@ private async Task ExecuteCheckinAsync()
 {
     IsCheckinButtonEnabled = false;
     CheckinButtonText = "签到中...";
-    
+
     await RefreshSettingsAsync();
 
     try
     {
         if (_isInternationalAccount)
         {
-            
             string cookie = "";
             try
             {
@@ -976,7 +978,7 @@ private async Task ExecuteCheckinAsync()
                 CheckinStatusText = "缺少 Cookie";
                 return;
             }
-            
+
             await UpdateUI(() =>
             {
                 var win = new HoyolabCheckinWindow(cookie);
@@ -989,29 +991,13 @@ private async Task ExecuteCheckinAsync()
         }
         else
         {
-            var targetUidObj = await _localSettingsService.ReadSettingAsync("CustomCheckinUid");
-            string targetUid = targetUidObj?.ToString();
+            var unifiedResult = await _unifiedCheckinService.ExecuteAllCheckinsAsync();
 
-            var (success, message) = await _checkinService.ExecuteCheckinAsync(targetUid);
+            CheckinStatusText = unifiedResult.OverallSuccess ? "签到完成" : "签到部分失败";
+            CheckinSummary = unifiedResult.SummaryMessage;
+            UpdateCheckinIconState(unifiedResult.OverallSuccess ? "已签到" : "Fail");
 
-            int signDays = MihoyoBBS.GameCheckin.LastSignDays;
-            string rewardItem = MihoyoBBS.GameCheckin.LastRewardItem;
-
-            bool isActualSuccess = success;
-            if (success && (string.IsNullOrEmpty(rewardItem) || rewardItem == "无/未知"))
-            {
-                isActualSuccess = false;
-            }
-
-            CheckinStatusText = isActualSuccess ? "签到成功" : "签到失败";
-            CheckinSummary = isActualSuccess ? "所有绑定角色已签到完成" : message;
-            UpdateCheckinIconState(isActualSuccess ? "已签到" : "Fail");
-
-            if (isActualSuccess)
-            {
-                string formattedMsg = $"连续签到: {signDays}天 | 获得奖励: {rewardItem}";
-                _notificationService.Show("签到成功", formattedMsg, NotificationType.Success, 3000);
-            }
+            _notificationService.Show("签到完成", unifiedResult.GetDetailedSummary(), unifiedResult.NotificationType, 5000);
         }
     }
     catch (Exception ex)

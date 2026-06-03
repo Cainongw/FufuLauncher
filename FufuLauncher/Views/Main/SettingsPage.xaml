@@ -778,137 +778,168 @@
 
                 <Border x:Name="CheckinSettingsItem" Style="{StaticResource SettingsCardStyle}">
                     <StackPanel>
-                        <TextBlock Text="签到配置"
-                                   Style="{ThemeResource SubtitleTextBlockStyle}"
-                                   Margin="0,0,0,16"/>
-
                         <StackPanel Spacing="12">
+                            <TextBlock Text="签到配置"
+                                       Style="{ThemeResource SubtitleTextBlockStyle}"
+                                       Margin="0,0,0,16"/>
 
-                            <ToggleSwitch Header="游戏签到"
-                                          OffContent="已禁用"
-                                          OnContent="已启用" 
-                                          IsOn="{x:Bind ViewModel.IsGameCheckinEnabled, Mode=TwoWay}"/>
-                            <TextBlock Text="领取米游社每日签到奖励（原石、摩拉等）"
-                                       Style="{ThemeResource CaptionTextBlockStyle}"
-                                       Opacity="0.7"
-                                       Margin="0,-16,0,0"/>
+                            <StackPanel Spacing="12">
+                                <ToggleSwitch Header="游戏签到"
+                                              OffContent="已禁用"
+                                              OnContent="已启用"
+                                              IsOn="{x:Bind ViewModel.IsGameCheckinEnabled, Mode=TwoWay}"/>
+                                <TextBlock Text="领取米游社每日签到奖励（原石、摩拉等）"
+                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                           Opacity="0.7"
+                                           Margin="0,-16,0,0"/>
 
-                            <StackPanel>
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <ToggleSwitch Header="社区签到"
+                                                      OffContent="已禁用"
+                                                      OnContent="已启用"
+                                                      IsOn="{x:Bind ViewModel.IsCommunityCheckinEnabled, Mode=TwoWay}"/>
+                                        <TextBlock Text="?" FontSize="14"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,16,0,0">
+                                            <ToolTipService.ToolTip>
+                                                <ToolTip Content="由于米游社逐步删除了互动获取米游币渠道，下方选项大概并不能让获取米游币变得更多，等待后续官方更新新策略"/>
+                                            </ToolTipService.ToolTip>
+                                        </TextBlock>
+                                    </StackPanel>
+                                    <TextBlock Text="自动完成社区互动任务获取米游币"
+                                               Style="{ThemeResource CaptionTextBlockStyle}"
+                                               Opacity="0.7"
+                                               Margin="0,-4,0,0"/>
+                                    <StackPanel Margin="32,4,0,0"
+                                                Orientation="Horizontal"
+                                                Visibility="{x:Bind ViewModel.IsCommunityCheckinEnabled, Mode=OneWay}">
+                                        <CheckBox Content="点赞"
+                                                  IsChecked="{x:Bind ViewModel.IsCommunityLikeEnabled, Mode=TwoWay}"
+                                                  Margin="0,0,16,0"/>
+                                        <CheckBox Content="看帖"
+                                                  IsChecked="{x:Bind ViewModel.IsCommunityReadEnabled, Mode=TwoWay}"
+                                                  Margin="0,0,16,0"/>
+                                        <CheckBox Content="分享"
+                                                  IsChecked="{x:Bind ViewModel.IsCommunityShareEnabled, Mode=TwoWay}"/>
+                                    </StackPanel>
+                                </StackPanel>
+
                                 <StackPanel Orientation="Horizontal" Spacing="4">
-                                    <ToggleSwitch Header="社区签到"
+                                    <ToggleSwitch Header="云游戏签到"
                                                   OffContent="已禁用"
                                                   OnContent="已启用"
-                                                  IsOn="{x:Bind ViewModel.IsCommunityCheckinEnabled, Mode=TwoWay}"/>
+                                                  IsOn="{x:Bind ViewModel.IsCloudGameCheckinEnabled, Mode=TwoWay}"/>
                                     <TextBlock Text="?" FontSize="14"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                VerticalAlignment="Center"
                                                Margin="0,16,0,0">
                                         <ToolTipService.ToolTip>
-                                            <ToolTip Content="由于米游社逐步删除了互动获取米游币渠道，下方选项大概并不能让获取米游币变得更多，等待后续官方更新新策略"/>
+                                            <ToolTip Content="开启云游戏签到需要对应账号添加云游戏登录凭证，否则跳过云游戏签到"/>
                                         </ToolTipService.ToolTip>
                                     </TextBlock>
                                 </StackPanel>
-                                <TextBlock Text="自动完成社区互动任务获取米游币"
+                                <TextBlock Text="领取云游戏签到奖励，需添加云游戏登录凭证"
                                            Style="{ThemeResource CaptionTextBlockStyle}"
                                            Opacity="0.7"
-                                           Margin="0,-4,0,0"/>
-                                <StackPanel Margin="32,4,0,0"
-                                            Orientation="Horizontal"
-                                            Visibility="{x:Bind ViewModel.IsCommunityCheckinEnabled, Mode=OneWay}">
-                                    <CheckBox Content="点赞"
-                                              IsChecked="{x:Bind ViewModel.IsCommunityLikeEnabled, Mode=TwoWay}"
-                                              Margin="0,0,16,0"/>
-                                    <CheckBox Content="看帖"
-                                              IsChecked="{x:Bind ViewModel.IsCommunityReadEnabled, Mode=TwoWay}"
-                                              Margin="0,0,16,0"/>
-                                    <CheckBox Content="分享"
-                                              IsChecked="{x:Bind ViewModel.IsCommunityShareEnabled, Mode=TwoWay}"/>
-                                </StackPanel>
-                            </StackPanel>
+                                           Margin="0,-16,0,0"/>
 
-                            <StackPanel Orientation="Horizontal" Spacing="4">
-                                <ToggleSwitch Header="云游戏签到"
+                                <ToggleSwitch Header="启动时自动签到"
                                               OffContent="已禁用"
                                               OnContent="已启用"
-                                              IsOn="{x:Bind ViewModel.IsCloudGameCheckinEnabled, Mode=TwoWay}"/>
-                                <TextBlock Text="?" FontSize="14"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                           VerticalAlignment="Center"
-                                           Margin="0,16,0,0">
-                                    <ToolTipService.ToolTip>
-                                        <ToolTip Content="开启云游戏签到需要对应账号添加云游戏登录凭证，否则跳过云游戏签到"/>
-                                    </ToolTipService.ToolTip>
-                                </TextBlock>
+                                              IsOn="{x:Bind ViewModel.IsAutoCheckinEnabled, Mode=TwoWay}"/>
+                                <TextBlock Text="开启后，将在应用启动时自动检测并在未签到时执行一键签到"
+                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                           Opacity="0.7"
+                                           Margin="0,-16,0,0"/>
                             </StackPanel>
-                            <TextBlock Text="领取云游戏签到奖励，需添加云游戏登录凭证"
-                                       Style="{ThemeResource CaptionTextBlockStyle}"
-                                       Opacity="0.7"
-                                       Margin="0,-16,0,0"/>
-
-                            <ToggleSwitch Header="启动时自动签到"
-                                          OffContent="已禁用"
-                                          OnContent="已启用"
-                                          IsOn="{x:Bind ViewModel.IsAutoCheckinEnabled, Mode=TwoWay}"/>
-                            <TextBlock Text="开启后，将在应用启动时自动检测并在未签到时执行一键签到"
-                                       Style="{ThemeResource CaptionTextBlockStyle}"
-                                       Opacity="0.7"
-                                       Margin="0,-16,0,0"/>
                         </StackPanel>
 
-                        <TextBlock Text="账号列表"
-                                   Style="{ThemeResource BodyStrongTextBlockStyle}"
-                                   FontSize="14"
-                                   Margin="0,20,0,8"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
 
-                        <Border CornerRadius="8"
-                                Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
-                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                BorderThickness="1"
-                                Padding="8"
-                                Width="500"
-                                HorizontalAlignment="Left">
-                            <ScrollViewer Height="160">
-                                <ListView ItemsSource="{x:Bind ViewModel.CheckinAccounts, Mode=OneWay}"
-                                          SelectionMode="None"
-                                          Background="Transparent">
-                                    <ListView.ItemTemplate>
-                                        <DataTemplate x:DataType="models:CheckinAccountItem">
-                                            <Grid Padding="0,4" ColumnSpacing="12">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                </Grid.ColumnDefinitions>
-                                                <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
-                                                          VerticalAlignment="Center"/>
-                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding Nickname}" FontSize="14"/>
-                                                    <TextBlock Text="{Binding Uid}" FontSize="12" Opacity="0.7"/>
-                                                </StackPanel>
-                                                <Button Grid.Column="2"
-                                                        Click="OnCloudCredentialClick"
-                                                        Tag="{Binding Uid}"
-                                                        Padding="8" CornerRadius="6"
-                                                        Background="Transparent"
-                                                        BorderThickness="0">
-                                                    <ToolTipService.ToolTip>
-                                                        <ToolTip Content="添加云游戏凭证"/>
-                                                    </ToolTipService.ToolTip>
-                                                    <Grid>
-                                                        <FontIcon Glyph="&#xE753;" FontSize="14"
-                                                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                                  Visibility="{Binding HasCloudCredential, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Inverse}"/>
-                                                        <FontIcon Glyph="&#xE753;" FontSize="14"
-                                                                  Foreground="#FF4CC2FF"
-                                                                  Visibility="{Binding HasCloudCredential, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                            <StackPanel Grid.Column="0" Margin="0,8,0,0">
+                                <TextBlock Text="账号列表"
+                                           Style="{ThemeResource BodyStrongTextBlockStyle}"
+                                           FontSize="14"
+                                           Margin="0,0,0,8"/>
+
+                                <Border CornerRadius="8"
+                                        Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        BorderThickness="1"
+                                        Padding="8"
+                                        Width="500"
+                                        HorizontalAlignment="Left">
+                                    <ScrollViewer Height="160">
+                                        <ListView ItemsSource="{x:Bind ViewModel.CheckinAccounts, Mode=OneWay}"
+                                                  SelectionMode="None"
+                                                  Background="Transparent">
+                                            <ListView.ItemTemplate>
+                                                <DataTemplate x:DataType="models:CheckinAccountItem">
+                                                    <Grid Padding="0,4" ColumnSpacing="12">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                                  VerticalAlignment="Center"/>
+                                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding Nickname}" FontSize="14"/>
+                                                            <TextBlock Text="{Binding Uid}" FontSize="12" Opacity="0.7"/>
+                                                        </StackPanel>
+                                                        <Button Grid.Column="2"
+                                                                Click="OnCloudCredentialClick"
+                                                                Tag="{Binding Uid}"
+                                                                Padding="8" CornerRadius="6"
+                                                                Background="Transparent"
+                                                                BorderThickness="0">
+                                                            <ToolTipService.ToolTip>
+                                                                <ToolTip Content="添加云游戏凭证"/>
+                                                            </ToolTipService.ToolTip>
+                                                            <Grid>
+                                                                <FontIcon Glyph="&#xE753;" FontSize="14"
+                                                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                          Visibility="{Binding HasCloudCredential, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Inverse}"/>
+                                                                <FontIcon Glyph="&#xE753;" FontSize="14"
+                                                                          Foreground="#FF4CC2FF"
+                                                                          Visibility="{Binding HasCloudCredential, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                            </Grid>
+                                                        </Button>
                                                     </Grid>
-                                                </Button>
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ListView.ItemTemplate>
-                                </ListView>
-                            </ScrollViewer>
-                        </Border>
+                                                </DataTemplate>
+                                            </ListView.ItemTemplate>
+                                        </ListView>
+                                    </ScrollViewer>
+                                </Border>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" VerticalAlignment="Bottom" Margin="12,8,0,0" Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="遇到验证码？"
+                                           Style="{ThemeResource CaptionTextBlockStyle}"
+                                           Opacity="0.6" VerticalAlignment="Center">
+                                    <ToolTipService.ToolTip>
+                                        <TextBlock Text="游戏签到和社区签到（概率较大）过程中可能会遇到验证码，需要配置真实设备信息降低风控频率，或使用独立部署版本配置打码服务。"
+                                                   TextWrapping="Wrap" MaxWidth="300"/>
+                                    </ToolTipService.ToolTip>
+                                </TextBlock>
+                                <HyperlinkButton Content="独立部署版本"
+                                               NavigateUri="https://github.com/Marchen-orz/MiyoQian"
+                                               FontSize="12"
+                                               Padding="0"
+                                               VerticalAlignment="Center">
+                                    <ToolTipService.ToolTip>
+                                        <TextBlock Text="游戏签到和社区签到（概率较大）过程中可能会遇到验证码，需要配置真实设备信息降低风控频率，或使用独立部署版本配置打码服务。"
+                                                   TextWrapping="Wrap" MaxWidth="300"/>
+                                    </ToolTipService.ToolTip>
+                                </HyperlinkButton>
+                            </StackPanel>
+                        </Grid>
                     </StackPanel>
                 </Border>
 

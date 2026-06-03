@@ -7,6 +7,7 @@ using FufuLauncher.Contracts.Services;
 using FufuLauncher.Models;
 using FufuLauncher.Models.Genshin;
 using FufuLauncher.Services;
+using MihoyoBBS;
 
 namespace FufuLauncher.ViewModels;
 
@@ -135,7 +136,7 @@ public class GenshinViewModel : INotifyPropertyChanged
             }
 
             var json = await File.ReadAllTextAsync(configPath);
-            var config = JsonSerializer.Deserialize<HoyoverseCheckinConfig>(json, new JsonSerializerOptions
+            var config = JsonSerializer.Deserialize<Config>(json, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             });

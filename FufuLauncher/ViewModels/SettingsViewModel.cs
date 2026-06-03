@@ -310,6 +310,18 @@ namespace FufuLauncher.ViewModels
             ClearCustomBackgroundCommand = new AsyncRelayCommand(ClearCustomBackgroundAsync);
             ResetGameExeNameCommand = new AsyncRelayCommand(ResetGameExeNameAsync);
 
+            WeakReferenceMessenger.Default.Register<CloudCredentialUpdatedMessage>(this, (r, m) =>
+            {
+                if (CheckinAccounts != null)
+                {
+                    var account = CheckinAccounts.FirstOrDefault(a => a.Uid == m.Value);
+                    if (account != null)
+                    {
+                        account.HasCloudCredential = true;
+                    }
+                }
+            });
+
             SwitchThemeCommand = new RelayCommand<ElementTheme>(
                 async (param) =>
                 {
@@ -1027,7 +1039,6 @@ namespace FufuLauncher.ViewModels
                     catch { }
                 }
 
-                var cloudCredentials = LoadCloudCredentials();
                 var accounts = new ObservableCollection<CheckinAccountItem>();
                 var baseDir = Helpers.AppPaths.DataDir;
                 var seenUids = new HashSet<string>();
@@ -1037,7 +1048,7 @@ namespace FufuLauncher.ViewModels
                     try
                     {
                         var json = await File.ReadAllTextAsync(file);
-                        var config = JsonSerializer.Deserialize<FufuLauncher.Models.HoyoverseCheckinConfig>(json);
+                        var config = JsonSerializer.Deserialize<Config>(json);
                         if (config?.Account?.Cookie == null) continue;
 
                         var match = Regex.Match(config.Account.Cookie, @"(?:account_id_v2|ltuid_v2|ltuid|account_id|stuid)=(\d+)");
@@ -1053,7 +1064,7 @@ namespace FufuLauncher.ViewModels
                             Uid = uid,
                             Nickname = nickname,
                             IsSelected = !disabledUids.Contains(uid),
-                            HasCloudCredential = cloudCredentials.ContainsKey(uid)
+                            HasCloudCredential = !string.IsNullOrEmpty(config.Account.CloudComboToken)
                         });
                     }
                     catch (Exception ex)
@@ -1083,24 +1094,30 @@ namespace FufuLauncher.ViewModels
             }
         }
 
-        private static Dictionary<string, string> LoadCloudCredentials()
+        public static void SaveCloudCredential(string uid, string credential)
         {
             try
             {
-                var path = Path.Combine(Helpers.AppPaths.DataDir, "cloud_credentials.json");
-                if (!File.Exists(path)) return new();
-                var json = File.ReadAllText(path);
-                return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new();
+                var baseDir = Helpers.AppPaths.DataDir;
+                foreach (var file in Directory.GetFiles(baseDir, "config*.json"))
+                {
+                    var json = File.ReadAllText(file);
+                    var config = System.Text.Json.JsonSerializer.Deserialize<Config>(json);
+                    if (config?.Account?.Cookie == null) continue;
+                    var match = System.Text.RegularExpressions.Regex.Match(config.Account.Cookie, @"(?:account_id_v2|ltuid_v2|ltuid|account_id|stuid)=(\d+)");
+                    if (match.Success && match.Groups[1].Value == uid)
+                    {
+                        config.Account.CloudComboToken = credential;
+                        var options = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+                        File.WriteAllText(file, System.Text.Json.JsonSerializer.Serialize(config, options));
+                    }
+                }
+                WeakReferenceMessenger.Default.Send(new CloudCredentialUpdatedMessage(uid));
             }
-            catch { return new(); }
-        }
-
-        public static void SaveCloudCredential(string uid, string credential)
-        {
-            var path = Path.Combine(Helpers.AppPaths.DataDir, "cloud_credentials.json");
-            var dict = LoadCloudCredentials();
-            dict[uid] = credential;
-            File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(dict));
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"保存云游戏凭证失败: {ex.Message}");
+            }
         }
 
         private async Task ResetGameExeNameAsync()

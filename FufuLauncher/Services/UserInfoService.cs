@@ -4,6 +4,7 @@ using FufuLauncher.Constants;
 using FufuLauncher.Contracts.Services;
 using FufuLauncher.Models;
 using Microsoft.Extensions.Logging;
+using MihoyoBBS;
 
 namespace FufuLauncher.Services;
 
@@ -173,15 +174,15 @@ public class UserInfoService : IUserInfoService
             string activeFile = activeFileObj?.ToString() ?? "config.json";
             var configPath = Path.Combine(AppContext.BaseDirectory, activeFile);
 
-            HoyoverseCheckinConfig oldConfig = new();
+            Config oldConfig = new();
 
             if (File.Exists(configPath))
             {
                 var json = await File.ReadAllTextAsync(configPath);
-                oldConfig = JsonSerializer.Deserialize<HoyoverseCheckinConfig>(json, new JsonSerializerOptions
+                oldConfig = JsonSerializer.Deserialize<Config>(json, new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true
-                }) ?? new HoyoverseCheckinConfig();
+                }) ?? new Config();
             }
 
             oldConfig.Account.Cookie = cookie;

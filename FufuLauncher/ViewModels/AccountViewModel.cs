@@ -10,6 +10,7 @@ using FufuLauncher.Contracts.Services;
 using FufuLauncher.Messages;
 using FufuLauncher.Models;
 using FufuLauncher.Services;
+using MihoyoBBS;
 using FufuLauncher.Views;
 
 namespace FufuLauncher.ViewModels;
@@ -90,7 +91,7 @@ public partial class AccountViewModel : ObservableRecipient
             if (File.Exists(configPath))
             {
                 var json = await File.ReadAllTextAsync(configPath);
-                var config = JsonSerializer.Deserialize<HoyoverseCheckinConfig>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                var config = JsonSerializer.Deserialize<Config>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
                 if (!string.IsNullOrEmpty(config?.Account?.Cookie))
                 {
@@ -132,7 +133,7 @@ public partial class AccountViewModel : ObservableRecipient
             if (!File.Exists(configPath)) return;
 
             var json = await File.ReadAllTextAsync(configPath);
-            var config = JsonSerializer.Deserialize<HoyoverseCheckinConfig>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            var config = JsonSerializer.Deserialize<Config>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
             if (!string.IsNullOrEmpty(config?.Account?.Cookie))
             {
@@ -193,7 +194,7 @@ public partial class AccountViewModel : ObservableRecipient
             }
 
             var json = await File.ReadAllTextAsync(configPath);
-            var config = JsonSerializer.Deserialize<HoyoverseCheckinConfig>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            var config = JsonSerializer.Deserialize<Config>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
             if (config?.Display == null || string.IsNullOrEmpty(config.Account?.Cookie))
             {
@@ -278,7 +279,7 @@ public partial class AccountViewModel : ObservableRecipient
                 if (fileName.Equals("config.json", StringComparison.OrdinalIgnoreCase)) continue;
 
                 var json = await File.ReadAllTextAsync(file);
-                var config = JsonSerializer.Deserialize<HoyoverseCheckinConfig>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                var config = JsonSerializer.Deserialize<Config>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                 if (config?.Account == null || string.IsNullOrEmpty(config.Account.Stuid)) continue;
 
                 string stuid = config.Account.Stuid;
@@ -320,7 +321,7 @@ public partial class AccountViewModel : ObservableRecipient
         if (File.Exists(mainConfigPath))
         {
             var json = await File.ReadAllTextAsync(mainConfigPath);
-            var config = JsonSerializer.Deserialize<HoyoverseCheckinConfig>(json, new JsonSerializerOptions
+            var config = JsonSerializer.Deserialize<Config>(json, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             });
@@ -422,7 +423,7 @@ public partial class AccountViewModel : ObservableRecipient
             if (File.Exists(configPath))
             {
                 var json = await File.ReadAllTextAsync(configPath);
-                var config = JsonSerializer.Deserialize<HoyoverseCheckinConfig>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                var config = JsonSerializer.Deserialize<Config>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
                 Debug.WriteLine($"[LoginAsync] 配置文件内容读取成功，Cookie是否为空: {string.IsNullOrEmpty(config?.Account?.Cookie)}");
 
@@ -478,7 +479,7 @@ public partial class AccountViewModel : ObservableRecipient
             }
 
             var json = await File.ReadAllTextAsync(configPath);
-            var config = JsonSerializer.Deserialize<HoyoverseCheckinConfig>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            var config = JsonSerializer.Deserialize<Config>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
             Debug.WriteLine($"[LoadUserInfo] Cookie读取状态: {(string.IsNullOrEmpty(config?.Account?.Cookie) ? "空" : "正常")}");
 
@@ -596,7 +597,7 @@ public partial class AccountViewModel : ObservableRecipient
             if (File.Exists(configPath))
             {
                 var json = await File.ReadAllTextAsync(configPath);
-                var config = JsonSerializer.Deserialize<HoyoverseCheckinConfig>(json, new JsonSerializerOptions
+                var config = JsonSerializer.Deserialize<Config>(json, new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true
                 });
@@ -673,7 +674,7 @@ public partial class AccountViewModel : ObservableRecipient
         if (File.Exists(mainConfigPath))
         {
             var json = await File.ReadAllTextAsync(mainConfigPath);
-            var config = JsonSerializer.Deserialize<HoyoverseCheckinConfig>(json, new JsonSerializerOptions
+            var config = JsonSerializer.Deserialize<Config>(json, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             });
@@ -681,22 +682,6 @@ public partial class AccountViewModel : ObservableRecipient
             {
                 File.Delete(mainConfigPath);
             }
-        }
-
-        var cloudCredPath = Path.Combine(baseDir, "cloud_credentials.json");
-        if (File.Exists(cloudCredPath))
-        {
-            try
-            {
-                var credJson = await File.ReadAllTextAsync(cloudCredPath);
-                var credDict = JsonSerializer.Deserialize<Dictionary<string, string>>(credJson);
-                if (credDict != null && credDict.ContainsKey(uid))
-                {
-                    credDict.Remove(uid);
-                    await File.WriteAllTextAsync(cloudCredPath, JsonSerializer.Serialize(credDict, new JsonSerializerOptions { WriteIndented = true }));
-                }
-            }
-            catch { }
         }
 
         await LoadSavedAccountsListAsync();
@@ -715,7 +700,7 @@ public partial class AccountViewModel : ObservableRecipient
                 if (File.Exists(configPath))
                 {
                     var json = await File.ReadAllTextAsync(configPath);
-                    var config = JsonSerializer.Deserialize<HoyoverseCheckinConfig>(json, new JsonSerializerOptions
+                    var config = JsonSerializer.Deserialize<Config>(json, new JsonSerializerOptions
                     {
                         PropertyNameCaseInsensitive = true
                     });
