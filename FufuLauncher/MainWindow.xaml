@@ -9,6 +9,31 @@
     mc:Ignorable="d">
 
     <Grid x:Name="RootGrid">
+        <Grid.Resources>
+            <ResourceDictionary>
+                <ResourceDictionary.ThemeDictionaries>
+                    <ResourceDictionary x:Key="Light">
+                        <AcrylicBrush x:Key="IosGlassBrush" 
+                                      TintColor="#FFFFFF" 
+                                      TintOpacity="0.1" 
+                                      FallbackColor="#CC000000"/>
+                    </ResourceDictionary>
+                    <ResourceDictionary x:Key="Default">
+                        <AcrylicBrush x:Key="IosGlassBrush" 
+                                      TintColor="#000000" 
+                                      TintOpacity="0.15" 
+                                      FallbackColor="#CC000000"/>
+                    </ResourceDictionary>
+                    <ResourceDictionary x:Key="Dark">
+                        <AcrylicBrush x:Key="IosGlassBrush" 
+                                      TintColor="#000000" 
+                                      TintOpacity="0.15" 
+                                      FallbackColor="#CC000000"/>
+                    </ResourceDictionary>
+                </ResourceDictionary.ThemeDictionaries>
+            </ResourceDictionary>
+        </Grid.Resources>
+
         <tb:TaskbarIcon x:Name="TrayIcon"
                         IconSource="/Assets/WindowIcon.ico"
                         ToolTipText="芙芙启动器"
@@ -32,7 +57,6 @@
                                 AutoPlay="True"
                                 AreTransportControlsEnabled="False"
                                 Visibility="Collapsed"/>
-    
             <Rectangle x:Name="GlobalBackgroundOverlay"
                        HorizontalAlignment="Stretch"
                        VerticalAlignment="Stretch"
@@ -70,23 +94,23 @@
                     <ResourceDictionary.ThemeDictionaries>
                         <ResourceDictionary x:Key="Light">
                             <AcrylicBrush x:Key="NavigationViewDefaultPaneBackground" 
-                                          TintColor="#F3F3F3" 
-                                          TintOpacity="0.5" 
-                                          FallbackColor="#E6F3F3F3"/>
+                                          TintColor="#FFFFFF" 
+                                          TintOpacity="0.1" 
+                                          FallbackColor="#CC000000"/>
                             <AcrylicBrush x:Key="NavigationViewExpandedPaneBackground" 
-                                          TintColor="#F3F3F3" 
-                                          TintOpacity="0.5" 
-                                          FallbackColor="#E6F3F3F3"/>
+                                          TintColor="#FFFFFF" 
+                                          TintOpacity="0.1" 
+                                          FallbackColor="#CC000000"/>
                         </ResourceDictionary>
                         <ResourceDictionary x:Key="Dark">
                              <AcrylicBrush x:Key="NavigationViewDefaultPaneBackground" 
-                                          TintColor="#151515" 
-                                          TintOpacity="0.6" 
-                                          FallbackColor="#E6151515"/>
+                                          TintColor="#000000" 
+                                          TintOpacity="0.15" 
+                                          FallbackColor="#CC000000"/>
                             <AcrylicBrush x:Key="NavigationViewExpandedPaneBackground" 
-                                          TintColor="#151515" 
-                                          TintOpacity="0.6" 
-                                          FallbackColor="#E6151515"/>
+                                          TintColor="#000000" 
+                                          TintOpacity="0.15" 
+                                          FallbackColor="#CC000000"/>
                         </ResourceDictionary>
                     </ResourceDictionary.ThemeDictionaries>
                     
@@ -187,12 +211,11 @@
                 <NavigationViewItem Content="设置中心" Tag="FufuLauncher.ViewModels.SettingsViewModel">
                     <NavigationViewItem.Icon>
                         <FontIcon x:Name="SettingsIcon" 
-                                  Glyph="&#xE713;"
-                                  FontFamily="{StaticResource ActionIconFont}" 
+                                  Glyph="&#xE713;" FontFamily="{StaticResource ActionIconFont}" 
                                   FontSize="24"
                                   RenderTransformOrigin="0.5,0.5">
                             <FontIcon.RenderTransform>
-                                <RotateTransform x:Name="SettingsIconRotation" Angle="0"/>
+                               <RotateTransform x:Name="SettingsIconRotation" Angle="0"/>
                             </FontIcon.RenderTransform>
                         </FontIcon>
                     </NavigationViewItem.Icon>
@@ -212,7 +235,7 @@
               Visibility="Collapsed" 
               Canvas.ZIndex="2000">
             
-             <Grid.RenderTransform>
+            <Grid.RenderTransform>
                <TranslateTransform x:Name="SystemMessageTranslate" Y="100"/>
             </Grid.RenderTransform>
 
@@ -222,7 +245,7 @@
                                   TintOpacity="0.0" 
                                   FallbackColor="#10FFFFFF"
                                   Opacity="0.6"/>
-               </Border.Background>
+                </Border.Background>
             
                 <Border.Shadow>
                     <ThemeShadow/>
@@ -230,7 +253,7 @@
             </Border>
 
             <StackPanel Orientation="Horizontal" Spacing="8" Padding="16,0,16,0" VerticalAlignment="Center">
-                 <FontIcon x:Name="SystemMessageIcon" Glyph="&#xE774;" FontSize="16"/>
+                <FontIcon x:Name="SystemMessageIcon" Glyph="&#xE774;" FontSize="16"/>
                 <TextBlock x:Name="SystemMessageText" Text="网络状态检测中..." FontSize="13" FontWeight="Medium"/>
             </StackPanel>
         </Grid>
@@ -296,14 +319,16 @@
               Margin="80,0,140,0"
               IsHitTestVisible="False">
             
-            <Border HorizontalAlignment="Left" VerticalAlignment="Center" CornerRadius="8" Padding="8,4,12,4">
-                <Border.Background>
-                    <SolidColorBrush Color="{ThemeResource SolidBackgroundFillColorBase}" Opacity="0.6"/>
-                </Border.Background>
+            <Border HorizontalAlignment="Left" 
+                    VerticalAlignment="Center" 
+                    CornerRadius="8" 
+                    Padding="8,4,12,4"
+                    Background="{StaticResource IosGlassBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1">
 
                 <StackPanel Orientation="Horizontal" Spacing="0">
                     <Image x:Name="TitleBarIcon" Width="20" Height="20" Margin="0,0,8,0" VerticalAlignment="Center"/>
-            
                     <TextBlock x:Name="TitleBarText"
                                Text="芙芙启动器"
                                FontSize="12"

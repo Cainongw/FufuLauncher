@@ -198,12 +198,12 @@ public sealed partial class MainPage : Page
     }
     private void ScreenshotButton_PointerEntered(object sender, PointerRoutedEventArgs e)
     {
-        AnimateBlurOpacity(0);
+
     }
 
     private void ScreenshotButton_PointerExited(object sender, PointerRoutedEventArgs e)
     {
-        AnimateBlurOpacity(1.0);
+
     }
     
 private async void RefreshTokenButton_Click(object sender, RoutedEventArgs e)
@@ -238,19 +238,7 @@ private async void OpenCheckinSettings_Click(object sender, RoutedEventArgs e)
 
     private void AnimateBlurOpacity(double toOpacity)
     {
-        var storyboard = new Storyboard();
-        var animation = new DoubleAnimation
-        {
-            To = toOpacity,
-            Duration = new Duration(TimeSpan.FromMilliseconds(200)),
-            EnableDependentAnimation = true
-        };
 
-        Storyboard.SetTarget(animation, ScreenshotBlurBorder);
-        Storyboard.SetTargetProperty(animation, "Opacity");
-
-        storyboard.Children.Add(animation);
-        storyboard.Begin();
     }
     
     private void OnOpenGachaAnalysisClick(object sender, RoutedEventArgs e)
@@ -406,8 +394,7 @@ private async void OpenCheckinSettings_Click(object sender, RoutedEventArgs e)
             EasingFunction = easing,
             EnableDependentAnimation = true
         };
-        var cardHost = InfoCardGrid.Parent as Grid;
-        Storyboard.SetTarget(heightAnim, cardHost);
+        Storyboard.SetTarget(heightAnim, InfoCardContainer);
         Storyboard.SetTargetProperty(heightAnim, "Height");
         sb.Children.Add(heightAnim);
 

@@ -122,6 +122,8 @@ namespace FufuLauncher.ViewModels
         [ObservableProperty] private bool _showWidgetVideo = true;
         [ObservableProperty] private bool _showWidgetBBS = true;
         
+        [ObservableProperty] private string _launchButtonOverlayColor = "#0078D7";
+        
         partial void OnIsShowWidgetCardEnabledChanged(bool value)
         {
             _ = _localSettingsService.SaveSettingAsync("IsShowWidgetCardEnabled", value);
@@ -285,7 +287,22 @@ namespace FufuLauncher.ViewModels
         
         public IAsyncRelayCommand DownloadLatestBackgroundImageCommand { get; }
         public IAsyncRelayCommand DownloadLatestBackgroundVideoCommand { get; }
+        
+        public IAsyncRelayCommand ResetLaunchButtonOverlayColorCommand { get; }
+        
+        private async Task ResetLaunchButtonOverlayColorAsync()
+        {
+            LaunchButtonOverlayColor = "#0078D7";
+            await _localSettingsService.SaveSettingAsync("LaunchButtonOverlayColor", "#0078D7");
+            WeakReferenceMessenger.Default.Send(new FufuLauncher.Messages.TextStyleChangedMessage());
+        }
 
+        partial void OnLaunchButtonOverlayColorChanged(string value)
+        {
+            _localSettingsService.SaveSettingAsync("LaunchButtonOverlayColor", value);
+            WeakReferenceMessenger.Default.Send(new FufuLauncher.Messages.TextStyleChangedMessage());
+        }
+        
         public SettingsViewModel(
             IThemeSelectorService themeSelectorService,
             IBackgroundRenderer backgroundRenderer,
@@ -312,6 +329,8 @@ namespace FufuLauncher.ViewModels
             UpdateWebView2CacheSize();
             ClearCustomBackgroundCommand = new AsyncRelayCommand(ClearCustomBackgroundAsync);
             ResetGameExeNameCommand = new AsyncRelayCommand(ResetGameExeNameAsync);
+            
+            ResetLaunchButtonOverlayColorCommand = new AsyncRelayCommand(ResetLaunchButtonOverlayColorAsync);
 
             WeakReferenceMessenger.Default.Register<CloudCredentialUpdatedMessage>(this, (r, m) =>
             {
@@ -735,6 +754,9 @@ namespace FufuLauncher.ViewModels
             
             var acrylicOverlayJson = await _localSettingsService.ReadSettingAsync("IsAcrylicOverlayEnabled");
             IsAcrylicOverlayEnabled = acrylicOverlayJson != null && Convert.ToBoolean(acrylicOverlayJson);
+            
+            var launchOverlayColorJson = await _localSettingsService.ReadSettingAsync("LaunchButtonOverlayColor");
+            LaunchButtonOverlayColor = launchOverlayColorJson?.ToString() ?? "#0078D7";
 
             var paramsJson = await _localSettingsService.ReadSettingAsync("CustomLaunchParameters");
             if (paramsJson != null)

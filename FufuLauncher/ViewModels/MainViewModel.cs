@@ -110,6 +110,8 @@ namespace FufuLauncher.ViewModels
         [ObservableProperty] private Visibility _showExpeditions = Visibility.Visible;
         [ObservableProperty] private Visibility _showTransformer = Visibility.Visible;
         [ObservableProperty] private bool _isDailyNoteLoaded;
+        
+        [ObservableProperty] private SolidColorBrush _launchButtonOverlayBrush = new(Microsoft.UI.Colors.Transparent);
 
         private DispatcherQueueTimer _bannerTimer;
 
@@ -524,6 +526,9 @@ private async Task OpenPresetManagerAsync()
             var checkinColor = await _localSettingsService.ReadSettingAsync("GameCheckinTextColor") as string ?? "#FFFFFF";
             var checkinOpacity = Convert.ToDouble(await _localSettingsService.ReadSettingAsync("GameCheckinTextOpacity") ?? 1.0);
             GameCheckinTextBrush = CreateBrush(checkinColor, checkinOpacity);
+            
+            var launchOverlayColor = await _localSettingsService.ReadSettingAsync("LaunchButtonOverlayColor") as string ?? "#0078D7";
+            LaunchButtonOverlayBrush = CreateBrush(launchOverlayColor, 0.4);
         }
 
         private SolidColorBrush CreateBrush(string hex, double opacity)

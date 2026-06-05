@@ -123,7 +123,8 @@
                         VerticalAlignment="Bottom"
                         Spacing="12">
                 
-                <Grid Height="{Binding InfoCardHeight, Mode=OneWay}"
+                <Grid x:Name="InfoCardContainer"
+                      Height="{Binding InfoCardHeight, Mode=OneWay}"
                       Translation="0,0,32"
                       Visibility="{x:Bind ViewModel.GameNewsCardVisibility, Mode=OneWay}"
                       PointerEntered="InfoCard_PointerEntered"
@@ -204,7 +205,6 @@
                                     </Image>
                                 </Grid>
 
-                                <!-- 左箭头 -->
                                 <Button x:Name="BannerPrevButton"
                                         HorizontalAlignment="Left" VerticalAlignment="Center"
                                         Margin="4,0,0,0"
@@ -218,7 +218,6 @@
                                     <FontIcon Glyph="&#xE76B;" FontSize="10" Foreground="White"/>
                                 </Button>
 
-                                <!-- 右箭头 -->
                                 <Button x:Name="BannerNextButton"
                                         HorizontalAlignment="Right" VerticalAlignment="Center"
                                         Margin="0,0,4,0"
@@ -254,7 +253,7 @@
                                 <SolidColorBrush x:Key="PivotHeaderItemForegroundSelected" Color="White" />
                                 <SolidColorBrush x:Key="PivotHeaderItemForegroundPointerOver" Color="#CCFFFFFF" />
                                 <SolidColorBrush x:Key="PivotHeaderItemForegroundPressed" Color="#99FFFFFF" />
-                                 
+                                
                                 <Style TargetType="PivotHeaderItem">
                                     <Setter Property="FontSize" Value="13"/>
                                     <Setter Property="FontWeight" Value="SemiBold"/>
@@ -400,7 +399,8 @@
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="原神便签" FontSize="14" FontWeight="SemiBold" 
                                            Foreground="White" VerticalAlignment="Center" Opacity="0.9"/>
-                                <Button Grid.Column="1" Click="RefreshDailyNoteButton_Click" Width="24" Height="24" Padding="0" Background="#1AFFFFFF" BorderThickness="0" CornerRadius="4" ToolTipService.ToolTip="刷新便签">
+                                <Button Grid.Column="1" Click="RefreshDailyNoteButton_Click" Width="24" Height="24" 
+                                        Padding="0" Background="#1AFFFFFF" BorderThickness="0" CornerRadius="4" ToolTipService.ToolTip="刷新便签">
                                     <FontIcon Glyph="&#xE72C;" FontSize="11" Foreground="White"/>
                                 </Button>
                             </Grid>
@@ -496,37 +496,58 @@
                        x:Name="CopyrightText"
                        IsHitTestVisible="True"/>
             
-            <StackPanel Grid.Column="1" 
-                        Orientation="Vertical" 
-                        VerticalAlignment="Top" 
-                        HorizontalAlignment="Right" 
-                        Margin="0,32,32,0" 
-                        Spacing="12">
+            <Border Grid.Column="1" 
+                    Width="48"
+                    VerticalAlignment="Top" 
+                    HorizontalAlignment="Right" 
+                    Margin="0,32,32,0" 
+                    Translation="0,0,32"
+                    Background="{StaticResource IosGlassBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="24">
                 
-                <Button Click="AnnouncementBell_Click"
-                        CornerRadius="24" 
-                        Padding="0" 
-                        Background="Transparent" 
-                        BorderThickness="0"
-                        HorizontalAlignment="Right">
-                    <Grid>
-                        <Border Background="{StaticResource IosGlassBrush}" 
-                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" 
-                                BorderThickness="1" 
-                                CornerRadius="24" />
-                        <FontIcon Glyph="&#xEA8F;" FontSize="18" Foreground="White" Margin="14,12"/>
-                    </Grid>
-                </Button>
-                
-                <Grid Background="Transparent" 
-                      HorizontalAlignment="Right">
-                    <Button IsEnabled="{x:Bind ViewModel.IsBackgroundToggleEnabled, Mode=OneWay}" 
-                            CornerRadius="24" 
-                            Padding="0" 
-                            Background="Transparent" 
-                            BorderThickness="0" 
-                            Margin="0">
-        
+                <Border.Shadow>
+                    <ThemeShadow/>
+                </Border.Shadow>
+
+                <StackPanel HorizontalAlignment="Center"
+                            Orientation="Vertical"
+                            Spacing="4"
+                            Padding="0,4">
+
+                    <StackPanel.Resources>
+                        <ResourceDictionary>
+                            <ResourceDictionary.ThemeDictionaries>
+                                <ResourceDictionary x:Key="Light">
+                                    <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#26FFFFFF"/>
+                                    <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#15FFFFFF"/>
+                                    <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="Transparent"/>
+                                    <SolidColorBrush x:Key="ButtonForegroundDisabled" Color="White"/>
+                                    <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="Transparent"/>
+                                </ResourceDictionary>
+                                <ResourceDictionary x:Key="Default">
+                                    <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#26FFFFFF"/>
+                                    <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#15FFFFFF"/>
+                                    <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="Transparent"/>
+                                    <SolidColorBrush x:Key="ButtonForegroundDisabled" Color="White"/>
+                                    <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="Transparent"/>
+                                </ResourceDictionary>
+                            </ResourceDictionary.ThemeDictionaries>
+                        </ResourceDictionary>
+                    </StackPanel.Resources>
+
+                    <Button Click="AnnouncementBell_Click"
+                            Width="44" Height="44" CornerRadius="22"
+                            Background="Transparent" BorderThickness="0" Padding="0"
+                            ToolTipService.ToolTip="公告">
+                        <FontIcon Glyph="&#xEA8F;" FontSize="18" Foreground="White"/>
+                    </Button>
+                    
+                    <Button IsEnabled="{x:Bind ViewModel.IsBackgroundToggleEnabled, Mode=OneWay}"
+                            Width="44" Height="44" CornerRadius="22"
+                            Background="Transparent" BorderThickness="0" Padding="0"
+                            ToolTipService.ToolTip="切换背景">
                         <Button.Flyout>
                             <Flyout x:Name="BackgroundFlyout" Placement="BottomEdgeAlignedRight">
                                 <GridView ItemsSource="{x:Bind ViewModel.AvailableBackgrounds, Mode=OneWay}"
@@ -547,38 +568,21 @@
                                 </GridView>
                             </Flyout>
                         </Button.Flyout>
-
-                        <Grid>
-                            <Border x:Name="BackgroundBlurBorder" Background="{StaticResource IosGlassBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="24">
-                            </Border>
-                            <FontIcon Glyph="&#xE8B9;" FontSize="18" 
-                                      Foreground="White" 
-                                      Margin="14,12" 
-                                      Opacity="{x:Bind GetIconOpacity(ViewModel.IsBackgroundToggleEnabled), Mode=OneWay}"/>
-                        </Grid>
+                        <FontIcon Glyph="&#xE8B9;" FontSize="18" Foreground="White" 
+                                  Opacity="{x:Bind GetIconOpacity(ViewModel.IsBackgroundToggleEnabled), Mode=OneWay}"/>
                     </Button>
-                </Grid>
 
-                <Button Command="{Binding OpenScreenshotFolderCommand}"
-                        IsEnabled="{Binding ViewModel.IsLaunchButtonEnabled, Mode=OneWay}"
-                        HorizontalAlignment="Right"
-                        CornerRadius="24" 
-                        Padding="0"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        PointerEntered="ScreenshotButton_PointerEntered"
-                        PointerExited="ScreenshotButton_PointerExited">
-                    <Grid>
-                        <Border x:Name="ScreenshotBlurBorder"
-                                Background="{StaticResource IosGlassBrush}"
-                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                BorderThickness="1"
-                                CornerRadius="24"
-                                Opacity="1.0" />
-                        <FontIcon Glyph="&#xE8B7;" FontSize="18" Foreground="White" Margin="14,12"/>
-                    </Grid>
-                </Button>
-            </StackPanel>
+                    <Button Command="{Binding OpenScreenshotFolderCommand}"
+                            IsEnabled="{Binding ViewModel.IsLaunchButtonEnabled, Mode=OneWay}"
+                            Width="44" Height="44" CornerRadius="22"
+                            Background="Transparent" BorderThickness="0" Padding="0"
+                            PointerEntered="ScreenshotButton_PointerEntered"
+                            PointerExited="ScreenshotButton_PointerExited"
+                            ToolTipService.ToolTip="截图文件夹">
+                        <FontIcon Glyph="&#xE8B7;" FontSize="18" Foreground="White"/>
+                    </Button>
+                </StackPanel>
+            </Border>
             
             <StackPanel Grid.Row="1" Grid.Column="1"
                         HorizontalAlignment="Right"
@@ -599,7 +603,6 @@
                     </Border.Shadow>
                     <StackPanel Spacing="8">
                         <TextBlock Text="小工具" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="White" Opacity="0.9"/>
-                        
                         <VariableSizedWrapGrid Orientation="Horizontal" ItemWidth="42" ItemHeight="42" MaximumRowsOrColumns="5">
                             <Button Click="OnOpenGachaAnalysisClick" Width="36" Height="36" Background="#1AFFFFFF" BorderThickness="0" CornerRadius="8" Padding="8" Margin="3" ToolTipService.ToolTip="抽卡记录分析" Visibility="{x:Bind ViewModel.WidgetGachaVisibility, Mode=OneWay}">
                                 <Image Source="https://act-upload.mihoyo.com/ys-obc/2025/01/21/73740358/4e65638b8b81ca7556f0fd42612d0be2_6482084243159257686.png"/>
@@ -656,7 +659,8 @@
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="24"/>
                                         </Grid.ColumnDefinitions>
-                                        <Button Grid.Column="0" Command="{Binding ElementName=MainPageRoot, Path=ViewModel.QuickSwitchPresetCommand}" CommandParameter="{Binding}" IsEnabled="{x:Bind IsNotActive, Mode=OneWay}" HorizontalAlignment="Stretch" Background="#1AFFFFFF" BorderThickness="0" Foreground="White" CornerRadius="4" Padding="12,6">
+                                        <Button Grid.Column="0" Command="{Binding ElementName=MainPageRoot, Path=ViewModel.QuickSwitchPresetCommand}" CommandParameter="{Binding}" IsEnabled="{x:Bind IsNotActive, Mode=OneWay}" HorizontalAlignment="Stretch" Background="#1AFFFFFF" BorderThickness="0" 
+                                                Foreground="White" CornerRadius="4" Padding="12,6">
                                             <TextBlock Text="{x:Bind Name}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                         </Button>
                                         <FontIcon Grid.Column="1" Glyph="&#xE73E;" FontSize="12" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="{x:Bind IsActive, Converter={StaticResource BoolToVisibilityConverter}, Mode=OneWay}"/>
@@ -697,11 +701,9 @@
                             BorderThickness="1"
                             CornerRadius="24"/>
 
-                    <Border x:Name="LaunchButtonOverlayBorder" CornerRadius="24">
-                        <Border.Background>
-                            <SolidColorBrush Color="#0078D7" Opacity="0.4"/>
-                        </Border.Background>
-                    </Border>
+                    <Border x:Name="LaunchButtonOverlayBorder" 
+                            CornerRadius="24" 
+                            Background="{x:Bind ViewModel.LaunchButtonOverlayBrush, Mode=OneWay}" />
 
                     <StackPanel Orientation="Horizontal" Spacing="12" Padding="36,18">
                         <ProgressRing Width="20" Height="20"
