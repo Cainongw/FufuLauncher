@@ -92,7 +92,19 @@ public sealed partial class MainWindow : WindowEx
 
     public MainWindow()
     {
-        InitializeComponent();
+        try
+        {
+            InitializeComponent();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"XAML解析失败: {ex.Message}");
+            if (ex.InnerException != null)
+            {
+                System.Diagnostics.Debug.WriteLine($"内部异常: {ex.InnerException.Message}");
+            }
+            throw; 
+        }
         
         PluginFolderHelper.CheckAndCreatePluginsFolder();
 
