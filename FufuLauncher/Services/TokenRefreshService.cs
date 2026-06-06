@@ -41,20 +41,6 @@ public class TokenRefreshService
         {
             var path = Helpers.AppPaths.ConfigFile;
 
-            // OS 模式只读 config.lab.json，不触发 CN 的 token 刷新
-            if (File.Exists(Helpers.AppPaths.ConfigLabFile))
-            {
-                var labJson = await File.ReadAllTextAsync(Helpers.AppPaths.ConfigLabFile);
-                var labDoc = JsonDocument.Parse(labJson);
-                if (labDoc.RootElement.TryGetProperty("Account", out var labAccount) &&
-                    labAccount.TryGetProperty("Cookie", out var labCookie) &&
-                    !string.IsNullOrEmpty(labCookie.GetString()))
-                {
-                    Debug.WriteLine("[TokenRefresh] 检测到 OS 配置文件，跳过 CN Token 刷新");
-                    return;
-                }
-            }
-
             if (!File.Exists(path))
             {
                 if (isManual) SendErrorNotification("未找到配置文件");
@@ -70,6 +56,18 @@ public class TokenRefreshService
                 return;
             }
             
+            var cookieDict = ParseCookieString(config.Account.Cookie);
+            cookieDict.TryGetValue("stoken", out string stoken);
+            cookieDict.TryGetValue("mid", out string mid);
+
+            if (string.IsNullOrEmpty(stoken) || string.IsNullOrEmpty(mid))
+            {
+                Debug.WriteLine("本地Cookie中缺少stoken或mid，无法刷新");
+                if (!isManual) return;
+                SendErrorNotification("本地Cookie中缺少stoken或mid，无法刷新");
+                return;
+            }
+
             if (!isManual)
             {
                 bool isValid = await CheckCookieValidAsync(config.Account.Cookie);
@@ -83,18 +81,6 @@ public class TokenRefreshService
             Debug.WriteLine(isManual ? "用户手动触发Coken刷新..." : "当前Cookie已失效或角色列表为空，开始执行Coken刷新...");
             
             WeakReferenceMessenger.Default.Send(new NotificationMessage("Cookie刷新", isManual ? "正在执行手动刷新..." : "Cookie已失效，正在执行刷新...", NotificationType.Warning, 3000));
-
-            var cookieDict = ParseCookieString(config.Account.Cookie);
-            
-            cookieDict.TryGetValue("stoken", out string stoken);
-            cookieDict.TryGetValue("mid", out string mid);
-
-            if (string.IsNullOrEmpty(stoken) || string.IsNullOrEmpty(mid))
-            {
-                Debug.WriteLine("本地Cookie中缺少stoken或mid，无法刷新");
-                if (isManual) SendErrorNotification("本地Cookie中缺少stoken或mid，无法刷新");
-                return;
-            }
 
             string authCookie = $"stoken={stoken}; mid={mid}";
             

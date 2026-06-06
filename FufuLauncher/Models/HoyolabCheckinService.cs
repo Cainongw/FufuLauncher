@@ -52,9 +52,8 @@ namespace FufuLauncher.Models
     // OS 签到响应
     public class OsSignResponseData
     {
-        [JsonPropertyName("success")] public int Success { get; set; }
-        [JsonPropertyName("gt")] public string Gt { get; set; }
-        [JsonPropertyName("challenge")] public string Challenge { get; set; }
+        [JsonPropertyName("code")] public string Code { get; set; }
+        [JsonPropertyName("first_bind")] public bool FirstBind { get; set; }
     }
 
     public class HoyolabCheckinService
@@ -333,21 +332,14 @@ namespace FufuLauncher.Models
                     continue;
                 }
 
-                var signDays = isData.TotalSignDay - 1;
+                var signDays = isData.TotalSignDay;
 
                 if (isData.IsSign)
                 {
-                    if (_checkinRewards != null && _checkinRewards.Count > signDays)
-                    {
-                        result += $"\n{account.Nickname}今天已经签到过了";
-                        result += $"\n今天获得的奖励是{FormatItem(_checkinRewards[signDays])}";
-                        signDays += 1;
-                    }
-                    else
-                    {
-                        result += $"\n{account.Nickname}今天已经签到过了";
-                        signDays += 1;
-                    }
+                    result += $"\n{account.Nickname}今天已经签到过了";
+                    var idx = signDays - 1;
+                    if (_checkinRewards != null && idx >= 0 && idx < _checkinRewards.Count)
+                        result += $"\n今天获得的奖励是{FormatItem(_checkinRewards[idx])}";
                 }
                 else
                 {
@@ -362,51 +354,33 @@ namespace FufuLauncher.Models
                         continue;
                     }
 
-                    if ((int)req.StatusCode != 429)
+                    if ((int)req.StatusCode == 429)
                     {
-                        var text = await req.Content.ReadAsStringAsync();
-                        var data = JsonSerializer.Deserialize<OsApiResponse<OsSignResponseData>>(text);
+                        result += $"\n{account.Nickname} 签到失败，触发 HTTP 429 限流";
+                        continue;
+                    }
 
-                        if (data != null)
-                        {
-                            if (data.RetCode == 0 && data.Data != null && data.Data.Success == 0)
-                            {
-                                var idx = signDays == 0 ? 0 : signDays + 1;
-                                if (_checkinRewards != null && _checkinRewards.Count > idx)
-                                {
-                                    result += $"\n{account.Nickname}签到成功";
-                                    result += $"\n奖励是{FormatItem(_checkinRewards[idx])}";
-                                    signDays += 2;
-                                }
-                                else
-                                {
-                                    result += $"\n{account.Nickname}签到成功";
-                                    signDays += 2;
-                                }
-                            }
-                            else if (data.RetCode == -5003)
-                            {
-                                if (_checkinRewards != null && _checkinRewards.Count > signDays)
-                                {
-                                    result += $"\n{account.Nickname}今天已经签到过了";
-                                    result += $"\n奖励是{FormatItem(_checkinRewards[signDays])}";
-                                }
-                            }
-                            else
-                            {
-                                result += $"\n{account.Nickname} 签到失败，API提示: {data.Message}";
-                                continue;
-                            }
-                        }
-                        else
-                        {
-                            result += $"\n{account.Nickname} 解析签到结果失败";
-                            continue;
-                        }
+                    var text = await req.Content.ReadAsStringAsync();
+                    var data = JsonSerializer.Deserialize<OsApiResponse<OsSignResponseData>>(text);
+
+                    if (data == null)
+                    {
+                        result += $"\n{account.Nickname} 解析签到结果失败";
+                        continue;
+                    }
+
+                    if (data.RetCode == 0 && data.Data?.Code == "ok")
+                    {
+                        signDays++;
+                        result += $"\n{account.Nickname}签到成功";
+                    }
+                    else if (data.RetCode == -5003)
+                    {
+                        result += $"\n{account.Nickname}今天已经签到过了";
                     }
                     else
                     {
-                        result += $"\n{account.Nickname} 签到失败，触发 HTTP 429 限流";
+                        result += $"\n{account.Nickname} 签到失败，API提示: {data.Message}";
                         continue;
                     }
                 }
@@ -414,9 +388,10 @@ namespace FufuLauncher.Models
                 result += $"\n{account.Nickname}已签到{signDays}天";
                 LastSignDays = signDays;
 
-                if (_checkinRewards != null && _checkinRewards.Count > signDays - 1)
+                var rewardIdx = signDays - 1;
+                if (_checkinRewards != null && rewardIdx >= 0 && rewardIdx < _checkinRewards.Count)
                 {
-                    LastRewardItem = FormatItem(_checkinRewards[signDays - 1]);
+                    LastRewardItem = FormatItem(_checkinRewards[rewardIdx]);
                     result += $"\n奖励是{LastRewardItem}";
                 }
             }

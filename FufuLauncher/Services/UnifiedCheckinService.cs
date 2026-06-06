@@ -166,11 +166,15 @@ public class UnifiedCheckinService : IUnifiedCheckinService
                     if (account.ConfigPath.Contains("lab"))
                     {
                         Report($"[{account.Nickname}] OS 账号跳过社区签到");
-                        result.AccountResults.Add(new AccountCheckinDetail
-                        {
-                            Nickname = account.Nickname,
-                            Items = { ("社区签到", null, "OS 账号不支持社区签到") }
-                        });
+                        var acct = result.AccountResults.FirstOrDefault(a => a.Nickname == account.Nickname);
+                        if (acct != null)
+                            acct.Items.Add(("社区签到", null, "OS 账号跳过"));
+                        else
+                            result.AccountResults.Add(new AccountCheckinDetail
+                            {
+                                Nickname = account.Nickname,
+                                Items = { ("社区签到", null, "OS 账号跳过") }
+                            });
                         continue;
                     }
 
@@ -287,7 +291,7 @@ public class UnifiedCheckinService : IUnifiedCheckinService
             }
         }
 
-        int successAccounts = result.AccountResults.Count(a => a.Items.All(i => i.Success != false));
+        int successAccounts = result.AccountResults.Count(a => a.Items.Any(i => i.Success == true));
         int failAccounts = result.AccountResults.Count(a => a.Items.Any(i => i.Success == false));
 
         if (failAccounts == 0)
