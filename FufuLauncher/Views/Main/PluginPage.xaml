@@ -72,7 +72,8 @@
                     <TextBlock Text="启动游戏时加载插件" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Right"/>
                 </StackPanel>
                 
-                <ToggleSwitch IsOn="{x:Bind MainViewModel.UseInjection, Mode=TwoWay}" 
+                <ToggleSwitch IsOn="{x:Bind MainViewModel.UseInjection, Mode=OneWay}" 
+                              Toggled="OnInjectionToggled"
                               IsEnabled="{x:Bind ControlPanelViewModel.IsGameRunning, Converter={StaticResource BoolInverter}, Mode=OneWay}"
                               OnContent="" OffContent="" 
                               MinWidth="0"

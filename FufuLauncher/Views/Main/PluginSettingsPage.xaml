@@ -314,7 +314,8 @@
                             <TextBlock Text="启用注入(Injection)" FontWeight="SemiBold" HorizontalAlignment="Right"/>
                             <TextBlock Text="启动游戏时加载插件" FontSize="11" Opacity="0.6" HorizontalAlignment="Right"/>
                         </StackPanel>
-                        <ToggleSwitch IsOn="{x:Bind MainVM.UseInjection, Mode=TwoWay}" 
+                        <ToggleSwitch IsOn="{x:Bind MainVM.UseInjection, Mode=OneWay}" 
+                                      Toggled="OnInjectionToggled"
                                       IsEnabled="{x:Bind InvertBool(ControlPanelVM.IsGameRunning), Mode=OneWay}"
                                       OnContent="" OffContent="" MinWidth="0" VerticalAlignment="Center"/>
                     </StackPanel>
