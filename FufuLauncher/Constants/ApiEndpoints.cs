@@ -3,6 +3,7 @@
     public static class ApiEndpoints
     {
         public const string RedeemCodesUrl = "https://cnb.cool/bettergi/genshin-redeem-code/-/git/raw/main/codes.json";
+        public const string RedeemCodesOsUrl = "https://hoyo-codes.seria.moe/codes?game=genshin";
         public const string GameBranchesUrl = "https://hyp-api.mihoyo.com/hyp/hyp-connect/api/getGameBranches?launcher_id=jGHBHlcOq1&language=zh-cn&game_ids[]=1Z8W5NHUQb";
         public const string AccountLockUrl = "https://user.mihoyo.com/login-platform/index.html?app_id=dw9y09jqjpxc&theme=passport&token_type=4&game_biz=plat_cn&steps_bar=1&uc_type=3&redirect_url=https%253A%252F%252Fuser.mihoyo.com%252Fpassport%252Findex.html%253Flegacy_env%253Dproduction%2523%252Fhome%252Fsecurity&st=https%253A%252F%252Fuser.mihoyo.com%252Fpassport%252Findex.html%253Flegacy_env%253Dproduction%2523%252Fhome%252Fsecurity&succ_back_type=redirect&fail_back_type=reLogin&ux_mode=redirect#/account/lock";
         public const string AccountSecurityUrl = "https://user.mihoyo.com/passport/index.html?legacy_env=production#/home/security";

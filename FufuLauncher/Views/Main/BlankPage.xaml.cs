@@ -52,6 +52,33 @@ public class RedeemCodeItem
     [System.Text.Json.Serialization.JsonPropertyName("valid")]
     public string Valid { get; set; } = string.Empty;
 }
+
+public class HoyoCodeResponse
+{
+    [System.Text.Json.Serialization.JsonPropertyName("codes")]
+    public List<HoyoCodeItem>? Codes { get; set; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("game")]
+    public string Game { get; set; } = string.Empty;
+}
+
+public class HoyoCodeItem
+{
+    [System.Text.Json.Serialization.JsonPropertyName("id")]
+    public int Id { get; set; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("code")]
+    public string Code { get; set; } = string.Empty;
+
+    [System.Text.Json.Serialization.JsonPropertyName("status")]
+    public string Status { get; set; } = string.Empty;
+
+    [System.Text.Json.Serialization.JsonPropertyName("game")]
+    public string Game { get; set; } = string.Empty;
+
+    [System.Text.Json.Serialization.JsonPropertyName("rewards")]
+    public string Rewards { get; set; } = string.Empty;
+}
 public class GameConfigData
 {
     public string GamePath { get; set; } = string.Empty;
@@ -390,10 +417,17 @@ private async void FpsOverlayToggle_Toggled(object sender, RoutedEventArgs e)
                 NoCodesText.Visibility = Visibility.Collapsed;
                 RedeemCodesList.Visibility = Visibility.Collapsed;
 
+                bool isOs = false;
+                if (_currentConfig?.GamePath != null)
+                {
+                    var dir = _currentConfig.GamePath;
+                    if (File.Exists(dir))
+                        dir = Path.GetDirectoryName(dir) ?? dir;
+                    isOs = dir != null && File.Exists(Path.Combine(dir, "GenshinImpact.exe"));
+                }
+
                 using var client = new HttpClient();
                 client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-
-                var json = await client.GetStringAsync(ApiEndpoints.RedeemCodesUrl);
 
                 var options = new JsonSerializerOptions
                 {
@@ -402,7 +436,26 @@ private async void FpsOverlayToggle_Toggled(object sender, RoutedEventArgs e)
                     ReadCommentHandling = JsonCommentHandling.Skip
                 };
 
-                var codes = JsonSerializer.Deserialize<List<RedeemCodeItem>>(json, options);
+                List<RedeemCodeItem>? codes = null;
+
+                if (isOs)
+                {
+                    var json = await client.GetStringAsync(ApiEndpoints.RedeemCodesOsUrl);
+                    var response = JsonSerializer.Deserialize<HoyoCodeResponse>(json, options);
+                    codes = response?.Codes?
+                        .Where(c => string.Equals(c.Status, "OK", StringComparison.OrdinalIgnoreCase))
+                        .Select(c => new RedeemCodeItem
+                        {
+                            Title = c.Rewards,
+                            Codes = new List<string> { c.Code }
+                        })
+                        .ToList();
+                }
+                else
+                {
+                    var json = await client.GetStringAsync(ApiEndpoints.RedeemCodesUrl);
+                    codes = JsonSerializer.Deserialize<List<RedeemCodeItem>>(json, options);
+                }
 
                 if (codes != null && codes.Count > 0)
                 {
