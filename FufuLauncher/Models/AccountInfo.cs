@@ -4,6 +4,8 @@ namespace FufuLauncher.Models;
 
 public partial class AccountInfo : ObservableObject
 {
+    [ObservableProperty]
+    private string _accountId = "";
     [ObservableProperty] private string _nickname = "";
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(GameUidDisplay))]

@@ -63,7 +63,7 @@ public sealed partial class CloudCredentialWindow : Window
             if (!string.IsNullOrEmpty(comboToken))
             {
                 _captured = true;
-                SettingsViewModel.SaveCloudCredential(_uid, comboToken);
+                await SettingsViewModel.SaveCloudCredentialAsync(_uid, comboToken);
 
                 DispatcherQueue.TryEnqueue(() =>
                 {

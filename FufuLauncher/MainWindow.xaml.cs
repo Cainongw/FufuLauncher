@@ -1210,8 +1210,21 @@ private async Task ApplyGlobalBackgroundAsync(BackgroundRenderResult? result)
             {
                 try
                 {
-                    var refreshService = new TokenRefreshService();
-                    await refreshService.RefreshCookieAsync();
+                    var accountManager = App.GetService<AccountManager>();
+                    var activeId = accountManager.ActiveAccountId;
+                    if (activeId != null)
+                    {
+                        var cookies = await accountManager.LoadCookiesAsync(activeId);
+                        if (cookies != null && cookies.Count > 0)
+                        {
+                            var refreshService = new TokenRefreshService();
+                            var newCookies = await refreshService.RefreshCookieAsync(cookies);
+                            if (newCookies != null)
+                            {
+                                await accountManager.UpdateCookiesAsync(activeId, newCookies);
+                            }
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {

@@ -57,6 +57,7 @@ namespace FufuLauncher.ViewModels
         private readonly INavigationService _navigationService;
         private readonly IGameLauncherService _gameLauncherService;
         private readonly IFilePickerService _filePickerService;
+        private readonly AccountManager _accountManager;
         public record MonitorItem(string DisplayName, int Index);
 
         [ObservableProperty] private ElementTheme _elementTheme;
@@ -374,7 +375,8 @@ namespace FufuLauncher.ViewModels
             ILocalSettingsService localSettingsService,
             INavigationService navigationService,
             IGameLauncherService gameLauncherService,
-            IFilePickerService filePickerService)
+            IFilePickerService filePickerService,
+            AccountManager accountManager)
         {
             _themeSelectorService = themeSelectorService;
             _backgroundRenderer = backgroundRenderer;
@@ -382,6 +384,7 @@ namespace FufuLauncher.ViewModels
             _navigationService = navigationService;
             _gameLauncherService = gameLauncherService;
             _filePickerService = filePickerService;
+            _accountManager = accountManager;
 
             InitializeDefaultResolution();
 
@@ -1155,37 +1158,26 @@ namespace FufuLauncher.ViewModels
                 }
 
                 var accounts = new ObservableCollection<CheckinAccountItem>();
-                var baseDir = Helpers.AppPaths.DataDir;
-                var seenUids = new HashSet<string>();
-
-                foreach (var file in Directory.GetFiles(baseDir, "config*.json"))
+                var entries = _accountManager.GetAllAccounts();
+                foreach (var entry in entries)
                 {
-                    try
+                    var cookies = await _accountManager.LoadCookiesAsync(entry.Id);
+                    if (cookies == null || cookies.Count == 0) continue;
+
+                    string uid = entry.Stuid;
+                    string nickname = entry.Nickname ?? $"用户 {uid}";
+
+                    string cloudTokenKey = $"CloudComboToken_{uid}";
+                    var cloudTokenObj = await _localSettingsService.ReadSettingAsync(cloudTokenKey);
+                    bool hasCloudCredential = !string.IsNullOrEmpty(cloudTokenObj?.ToString());
+
+                    accounts.Add(new CheckinAccountItem
                     {
-                        var json = await File.ReadAllTextAsync(file);
-                        var config = JsonSerializer.Deserialize<Config>(json);
-                        if (config?.Account?.Cookie == null) continue;
-
-                        var match = Regex.Match(config.Account.Cookie, @"(?:account_id_v2|ltuid_v2|ltuid|account_id|stuid)=(\d+)");
-                        if (!match.Success) continue;
-                        var uid = match.Groups[1].Value;
-                        if (!seenUids.Add(uid)) continue;
-
-                        string nickname = config.Display?.Nickname ?? $"用户 {uid}";
-                        if (string.IsNullOrEmpty(nickname)) nickname = $"用户 {uid}";
-
-                        accounts.Add(new CheckinAccountItem
-                        {
-                            Uid = uid,
-                            Nickname = nickname,
-                            IsSelected = !disabledUids.Contains(uid),
-                            HasCloudCredential = !string.IsNullOrEmpty(config.Account.CloudComboToken)
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"读取账号配置失败 {file}: {ex.Message}");
-                    }
+                        Uid = uid,
+                        Nickname = nickname,
+                        IsSelected = !disabledUids.Contains(uid),
+                        HasCloudCredential = hasCloudCredential
+                    });
                 }
 
                 CheckinAccounts = accounts;
@@ -1209,24 +1201,14 @@ namespace FufuLauncher.ViewModels
             }
         }
 
-        public static void SaveCloudCredential(string uid, string credential)
+        public static async Task SaveCloudCredentialAsync(string uid, string credential)
         {
             try
             {
-                var baseDir = Helpers.AppPaths.DataDir;
-                foreach (var file in Directory.GetFiles(baseDir, "config*.json"))
-                {
-                    var json = File.ReadAllText(file);
-                    var config = System.Text.Json.JsonSerializer.Deserialize<Config>(json);
-                    if (config?.Account?.Cookie == null) continue;
-                    var match = System.Text.RegularExpressions.Regex.Match(config.Account.Cookie, @"(?:account_id_v2|ltuid_v2|ltuid|account_id|stuid)=(\d+)");
-                    if (match.Success && match.Groups[1].Value == uid)
-                    {
-                        config.Account.CloudComboToken = credential;
-                        var options = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
-                        File.WriteAllText(file, System.Text.Json.JsonSerializer.Serialize(config, options));
-                    }
-                }
+                var localSettings = App.GetService<ILocalSettingsService>();
+                string key = $"CloudComboToken_{uid}";
+                await localSettings.SaveSettingAsync(key, credential);
+
                 WeakReferenceMessenger.Default.Send(new CloudCredentialUpdatedMessage(uid));
             }
             catch (Exception ex)
@@ -1714,7 +1696,6 @@ namespace FufuLauncher.ViewModels
 
         private async Task RefreshMainPageBackground()
         {
-            // removed: main page background no longer applies; global background refresh is handled by MainWindow.
             await Task.CompletedTask;
         }
 

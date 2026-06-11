@@ -32,6 +32,7 @@ public sealed partial class LoginQrWindow : Window
     private readonly string _deviceId;
     private readonly string _deviceFp;
     private readonly HttpClient _httpClient;
+
     public bool DidLoginSucceed() => IsLoginSuccessful;
     private string _appTicket;
     private string _gameTicket;
@@ -44,7 +45,7 @@ public sealed partial class LoginQrWindow : Window
                     
     private SemaphoreSlim _extractSemaphore = new SemaphoreSlim(1, 1);
     private DispatcherQueue _dispatcherQueue;
-
+    private TaskCompletionSource<(Dictionary<string, string> Cookies, string ServerType)>? _loginTcs;
     private ContentDialog _statusDialog;
     private bool _isDialogOpen;
 
@@ -93,6 +94,7 @@ public sealed partial class LoginQrWindow : Window
 
     private void LoginQrWindow_Closed(object sender, WindowEventArgs args)
     {
+        _loginTcs?.TrySetCanceled();
         _pollingCts?.Cancel();
         if (PassportWebView != null && PassportWebView.CoreWebView2 != null)
         {
@@ -163,10 +165,16 @@ public sealed partial class LoginQrWindow : Window
         ContentDialogButtonClickDeferral deferral = args.GetDeferral();
         try
         {
-            await SaveConfigForLauncherAsync(cookieStr);
-            IsLoginSuccessful = true;
-            UpdateStatus("登录成功", false, true);
-            DispatcherQueue.TryEnqueue(() => Close());
+            var cookies = ParseCookieString(cookieStr);
+            if (cookies.Count == 0)
+            {
+                args.Cancel = true;
+                errorTextBlock.Text = "Cookie 格式无效";
+                errorTextBlock.Visibility = Visibility.Visible;
+                return;
+            }
+            string serverType = cookies.ContainsKey("ltuid_v2") || cookies.ContainsKey("cookie_token_v2") ? "os" : "cn";
+            OnLoginSuccess(cookies, serverType);
         }
         catch (Exception ex)
         {
@@ -383,6 +391,28 @@ public sealed partial class LoginQrWindow : Window
             await StartAppLoginFlowAsync();
         }
     }
+    private void OnLoginSuccess(Dictionary<string, string> cookies, string serverType)
+    {
+        if (_loginTcs == null)
+            return;
+
+        _loginTcs.TrySetResult((cookies, serverType));
+
+
+        DispatcherQueue.TryEnqueue(() => Close());
+    }
+    private void OnLoginFailed(Exception? ex = null)
+    {
+        if (_loginTcs == null)
+            return;
+
+        if (ex != null)
+            _loginTcs.TrySetException(ex);
+        else
+            _loginTcs.TrySetCanceled();
+
+        DispatcherQueue.TryEnqueue(() => Close());
+    }
 
     #endregion
 
@@ -492,7 +522,6 @@ public sealed partial class LoginQrWindow : Window
         if (confirmedData != null)
         {
             await ProcessAndExchangeV2TokensAsync(confirmedData);
-            DispatcherQueue.TryEnqueue(() => Close());
         }
     }
     private async Task ProcessAndExchangeV2TokensAsync(JsonNode dataNode)
@@ -512,8 +541,12 @@ public sealed partial class LoginQrWindow : Window
             UpdateStatus("提取失败，请重试", false);
             return;
         }
-        
-        await ExchangeV2TokensAndSaveAsync(stoken, mid, aid);
+
+        var cookies = await ExchangeV2TokensAsync(stoken, mid, aid);
+        if (cookies != null)
+        {
+            OnLoginSuccess(cookies, "cn");
+        }
     }
     #endregion
 
@@ -626,7 +659,6 @@ public sealed partial class LoginQrWindow : Window
                             string uid = rawNode["uid"]?.GetValue<string>();
                             string token = rawNode["token"]?.GetValue<string>();
                             await GetSTokenByGameTokenAsync(uid, token);
-                            DispatcherQueue.TryEnqueue(() => Close());
                             return;
                         }
                     }
@@ -686,7 +718,11 @@ public sealed partial class LoginQrWindow : Window
 
                 if (!string.IsNullOrEmpty(stoken) && !string.IsNullOrEmpty(mid))
                 {
-                    await ExchangeV2TokensAndSaveAsync(stoken, mid, accountId);
+                    var cookies = await ExchangeV2TokensAsync(stoken, mid, accountId);
+                    if (cookies != null)
+                    {
+                        OnLoginSuccess(cookies, "cn");
+                    }
                     return;
                 }
             }
@@ -726,8 +762,8 @@ public sealed partial class LoginQrWindow : Window
     #endregion
 
     #region 扫码换取V2Cookie
-    
-private async Task ExchangeV2TokensAndSaveAsync(string stoken, string mid, string aid)
+
+    private async Task<Dictionary<string, string>?> ExchangeV2TokensAsync(string stoken, string mid, string aid)
     {
         try
         {
@@ -737,7 +773,7 @@ private async Task ExchangeV2TokensAndSaveAsync(string stoken, string mid, strin
                 ["stoken"] = stoken,
                 ["mid"] = mid,
                 ["account_id"] = aid,
-                ["ltuid"] = aid 
+                ["ltuid"] = aid
             };
 
             string cookieToken = await GetCookieAccountInfoBySTokenAsync(stoken);
@@ -750,7 +786,7 @@ private async Task ExchangeV2TokensAndSaveAsync(string stoken, string mid, strin
             if (string.IsNullOrEmpty(webTicket))
             {
                 UpdateStatus("无法创建验证凭据");
-                return;
+                return null;
             }
 
             string authCookie = $"stoken={stoken}; mid={mid}";
@@ -759,7 +795,7 @@ private async Task ExchangeV2TokensAndSaveAsync(string stoken, string mid, strin
             if (!scanResult)
             {
                 UpdateStatus("扫描请求被拒绝");
-                return;
+                return null;
             }
 
             await Task.Delay(1000);
@@ -768,7 +804,7 @@ private async Task ExchangeV2TokensAndSaveAsync(string stoken, string mid, strin
             if (!confirmResult)
             {
                 UpdateStatus("请求被拒绝");
-                return;
+                return null;
             }
 
             var v2Cookies = await GetWebQrStatusAndExtractCookiesAsync(webTicket);
@@ -778,22 +814,24 @@ private async Task ExchangeV2TokensAndSaveAsync(string stoken, string mid, strin
                 {
                     finalCookies[kvp.Key] = kvp.Value;
                 }
-                
+
                 if (!finalCookies.ContainsKey("stoken") || string.IsNullOrEmpty(finalCookies["stoken"]))
                 {
                     finalCookies["stoken"] = stoken;
                 }
 
-                await SaveCredentialsAsync(finalCookies);
+                return finalCookies;
             }
             else
             {
                 UpdateStatus("未能从响应头提取出完整Cookie");
+                return null;
             }
         }
         catch (Exception ex)
         {
             UpdateStatus($"凭证换取异常: {ex.Message}");
+            return null;
         }
     }
 
@@ -990,18 +1028,16 @@ private async Task ExchangeV2TokensAndSaveAsync(string stoken, string mid, strin
 
                 if (cookieDict.ContainsKey("cookie_token") || cookieDict.ContainsKey("cookie_token_v2"))
                 {
-                    DispatcherQueue.TryEnqueue(async () =>
+                    DispatcherQueue.TryEnqueue(() =>
                     {
                         try
                         {
-                            UpdateStatus("凭证提取成功，正在保存", true);
-                            await SaveCredentialsAsync(cookieDict);
-                            UpdateStatus("登录成功", false, true);
-                            Close();
+                            UpdateStatus("凭证提取成功", true);
+                            OnLoginSuccess(cookieDict, "cn");
                         }
                         catch (Exception ex)
                         {
-                            UpdateStatus($"保存失败: {ex.Message}", false);
+                            UpdateStatus($"处理失败: {ex.Message}", false);
                         }
                     });
                 }
@@ -1174,23 +1210,16 @@ private async Task ExchangeV2TokensAndSaveAsync(string stoken, string mid, strin
 
         _hoYoLabCredentialsExtracted = true;
 
-        bool enqueued = _dispatcherQueue.TryEnqueue(async () =>
+        bool enqueued = _dispatcherQueue.TryEnqueue(() =>
         {
             try
             {
-                UpdateStatus("HoYoLAB凭证提取成功，正在保存...", true);
-                await SaveLabCredentialsAsync(dict);
-
-
-
-                IsLoginSuccessful = true;
-                UpdateStatus("登录成功", false, true);
-                Close();
+                UpdateStatus("HoYoLAB凭证提取成功", true);
+                OnLoginSuccess(dict, "os");
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"保存凭证或关闭窗口失败: {ex}");
-
+                Debug.WriteLine($"处理失败: {ex}");
             }
         });
 
@@ -1202,217 +1231,16 @@ private async Task ExchangeV2TokensAndSaveAsync(string stoken, string mid, strin
     }
     #endregion
 
-    #region Cookie 保存
-    private async Task SaveLabCredentialsAsync(Dictionary<string, string> cookies)
-    {
-        var cookieList = new List<string>();
-        foreach (var kvp in cookies)
-        {
-            cookieList.Add($"{kvp.Key}={kvp.Value}");
-        }
-        string cookieString = string.Join("; ", cookieList);
-
-        await SaveLabConfigForLauncherAsync(cookieString);
-
-        IsLoginSuccessful = true;
-        UpdateStatus("HoYoLAB登录成功", false, true);
-       
-    }
-    private async Task SaveLabConfigForLauncherAsync(string cookieString)
-    {
-        try
-        {
-            var path = Helpers.AppPaths.ConfigLabFile;
-            var dir = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
-
-            var config = new Config();
-            if (File.Exists(path))
-            {
-                var json = await File.ReadAllTextAsync(path);
-                config = JsonSerializer.Deserialize<Config>(json) ?? new Config();
-            }
-
-            config.Account.Cookie = cookieString;
-
-            if (cookieString.Contains("account_id_v2="))
-            {
-                var match = System.Text.RegularExpressions.Regex.Match(cookieString, @"account_id_v2=(\d+)");
-                if (match.Success) config.Account.Stuid = match.Groups[1].Value;
-            }
-            else if (cookieString.Contains("ltuid_v2="))
-            {
-                var match = System.Text.RegularExpressions.Regex.Match(cookieString, @"ltuid_v2=(\d+)");
-                if (match.Success) config.Account.Stuid = match.Groups[1].Value;
-            }
-
-            if (cookieString.Contains("stoken="))
-            {
-                var stokenMatch = System.Text.RegularExpressions.Regex.Match(cookieString, @"stoken=([^;]+)");
-                if (stokenMatch.Success) config.Account.Stoken = stokenMatch.Groups[1].Value;
-            }
-
-            if (cookieString.Contains("mid="))
-            {
-                var midMatch = System.Text.RegularExpressions.Regex.Match(cookieString, @"mid=([^;]+)");
-                if (midMatch.Success) config.Account.Mid = midMatch.Groups[1].Value;
-            }
-
-            var options = new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-            };
-
-            var newJson = JsonSerializer.Serialize(config, options);
-            await File.WriteAllTextAsync(path, newJson);
-
-            try
-            {
-                var localSettingsService = App.GetService<ILocalSettingsService>();
-                await localSettingsService.SaveSettingAsync("ActiveConfigFile", "config.lab.json");
-                await localSettingsService.SaveSettingAsync("IsInternationalAccount", true);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"HoYoLAB配置数据库保存失败: {ex.Message}");
-
-                WeakReferenceMessenger.Default.Send(
-                    new NotificationMessage(
-                        "保存状态异常",
-                        $"HoYoLAB配置数据库保存失败: {ex.Message}",
-                        NotificationType.Error,
-                        4000
-                    )
-                );
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"HoYoLAB配置保存失败: {ex.Message}");
-
-            WeakReferenceMessenger.Default.Send(
-                new NotificationMessage(
-                    "写入配置失败",
-                    $"无法保存HoYoLAB配置文件: {ex.Message}",
-                    NotificationType.Error,
-                    4000
-                )
-            );
-        }
-    }
-    private async Task SaveCredentialsAsync(Dictionary<string, string> cookies)
-    {
-        var cookieList = new List<string>();
-        foreach (var kvp in cookies)
-        {
-            cookieList.Add($"{kvp.Key}={kvp.Value}");
-        }
-        string cookieString = string.Join("; ", cookieList);
-
-        await SaveConfigForLauncherAsync(cookieString);
-
-        IsLoginSuccessful = true;
-        UpdateStatus("登录成功", false, true);
-       
-    }
-
-    private async Task SaveConfigForLauncherAsync(string cookieString)
-    {
-        try
-        {
-            var path = Helpers.AppPaths.ConfigFile;
-            var dir = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
-
-            var config = new Config();
-            if (File.Exists(path))
-            {
-                var json = await File.ReadAllTextAsync(path);
-                config = JsonSerializer.Deserialize<Config>(json) ?? new Config();
-            }
-
-            config.Account.Cookie = cookieString;
-
-            if (cookieString.Contains("account_id="))
-            {
-                var match = System.Text.RegularExpressions.Regex.Match(cookieString, @"account_id=(\d+)");
-                if (match.Success) config.Account.Stuid = match.Groups[1].Value;
-            }
-            else if (cookieString.Contains("ltuid="))
-            {
-                var match = System.Text.RegularExpressions.Regex.Match(cookieString, @"ltuid=(\d+)");
-                if (match.Success) config.Account.Stuid = match.Groups[1].Value;
-            }
-            else if (cookieString.Contains("stuid="))
-            {
-                var match = System.Text.RegularExpressions.Regex.Match(cookieString, @"stuid=(\d+)");
-                if (match.Success) config.Account.Stuid = match.Groups[1].Value;
-            }
-
-            var cookies = cookieString.Split(';', StringSplitOptions.RemoveEmptyEntries);
-            foreach (var cookie in cookies)
-            {
-                var kvp = cookie.Trim();
-                if (kvp.StartsWith("stoken="))
-                {
-                    config.Account.Stoken = kvp.Substring(7);
-                }
-                else if (kvp.StartsWith("mid="))
-                {
-                    config.Account.Mid = kvp.Substring(4);
-                }
-            }
-
-            var options = new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-            };
-
-            var newJson = JsonSerializer.Serialize(config, options);
-            await File.WriteAllTextAsync(path, newJson);
-
-            try
-            {
-                var localSettingsService = App.GetService<ILocalSettingsService>();
-                await localSettingsService.SaveSettingAsync("ActiveConfigFile", "config.json");
-                await localSettingsService.SaveSettingAsync("IsInternationalAccount", false);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"配置数据库保存失败: {ex.Message}");
-
-                WeakReferenceMessenger.Default.Send(
-                    new NotificationMessage(
-                        "保存状态异常",
-                        $"配置数据库保存失败: {ex.Message}",
-                        NotificationType.Error,
-                        4000
-                    )
-                );
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"兼容配置保存失败: {ex.Message}");
-
-            WeakReferenceMessenger.Default.Send(
-                new NotificationMessage(
-                    "写入配置失败",
-                    $"无法保存配置文件，请检查权限: {ex.Message}",
-                    NotificationType.Error,
-                    4000
-                )
-            );
-        }
-    }
-
-    #endregion
-
     #region 公共
+    //公开方法
+    public Task<(Dictionary<string, string> Cookies, string ServerType)> ShowAndWaitAsync()
+    {
+        _loginTcs?.TrySetCanceled();
+
+        _loginTcs = new TaskCompletionSource<(Dictionary<string, string>, string)>();
+        this.Activate();
+        return _loginTcs.Task;
+    }
     private async Task<string> GetCookieAccountInfoBySTokenAsync(string stoken)
     {
         string url = $"{ApiEndpoints.GetCookieAccountInfoBySTokenUrl}?stoken={stoken}";
@@ -1507,7 +1335,23 @@ private async Task ExchangeV2TokensAndSaveAsync(string stoken, string mid, strin
             return sb.ToString();
         }
     }
-
+    private Dictionary<string, string> ParseCookieString(string cookieString)
+    {
+        var dict = new Dictionary<string, string>();
+        foreach (var part in cookieString.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var trimmed = part.Trim();
+            var idx = trimmed.IndexOf('=');
+            if (idx > 0)
+            {
+                var key = trimmed.Substring(0, idx).Trim();
+                var value = trimmed.Substring(idx + 1).Trim();
+                if (!string.IsNullOrEmpty(key) && !dict.ContainsKey(key))
+                    dict[key] = value;
+            }
+        }
+        return dict;
+    }
     #endregion
 
     #region 状态对话框管理
@@ -1578,39 +1422,4 @@ private async Task ExchangeV2TokensAndSaveAsync(string stoken, string mid, strin
         });
     }
     #endregion
-
-    //private async void HoYoLabWebResourceResponseReceived(object sender, CoreWebView2WebResourceResponseReceivedEventArgs e)
-    //{
-    //    string uri = e.Request.Uri;
-
-    //    if (uri.Contains("webLoginByPassword") && e.Response.StatusCode == 200)
-    //    {
-
-    //        PassportWebView.CoreWebView2.WebResourceResponseReceived -= HoYoLabWebResourceResponseReceived;
-
-    //        var cookies = await PassportWebView.CoreWebView2.CookieManager
-    //            .GetCookiesAsync("https://account.hoyolab.com");
-
-    //        var cookieDict = new Dictionary<string, string>();
-    //        foreach (var cookie in cookies)
-    //        {
-    //            if (!string.IsNullOrEmpty(cookie.Value))
-    //                cookieDict[cookie.Name] = cookie.Value;
-    //        }
-
-    //        if (cookieDict.ContainsKey("cookie_token_v2"))
-    //        {
-    //            UpdateStatus("HoYoLAB凭证提取成功，正在保存...", true);
-    //            SaveLabCredentials(cookieDict);
-    //            IsLoginSuccessful = true;
-    //            UpdateStatus("登录成功", false, true);
-    //            DispatcherQueue.TryEnqueue(() => Close());
-    //        }
-    //        else
-    //        {
-    //            UpdateStatus("未能获取完整凭证，请重试", false);
-    //        }
-    //    }
-    //}
-
 }

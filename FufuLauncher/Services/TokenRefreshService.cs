@@ -34,110 +34,103 @@ public class TokenRefreshService
         var handler = new HttpClientHandler { UseCookies = false };
         _httpClient = new HttpClient(handler);
     }
-    
-    public async Task RefreshCookieAsync(bool isManual = false)
+
+    public async Task<Dictionary<string, string>?> RefreshCookieAsync(Dictionary<string, string> currentCookies, bool isManual = false)
     {
         try
         {
-            var path = Helpers.AppPaths.ConfigFile;
-
-            if (!File.Exists(path))
+            if (currentCookies == null || currentCookies.Count == 0)
             {
-                if (isManual) SendErrorNotification("未找到配置文件");
-                return;
+                if (isManual) SendErrorNotification("未提供有效的 Cookie");
+                return null;
             }
 
-            var json = await File.ReadAllTextAsync(path);
-            var config = JsonSerializer.Deserialize<Config>(json);
-            
-            if (config == null || string.IsNullOrEmpty(config.Account.Cookie))
-            {
-                if (isManual) SendErrorNotification("配置文件中未找到有效的 Cookie");
-                return;
-            }
-            
-            var cookieDict = ParseCookieString(config.Account.Cookie);
-            cookieDict.TryGetValue("stoken", out string stoken);
-            cookieDict.TryGetValue("mid", out string mid);
+           
+            currentCookies.TryGetValue("stoken", out string stoken);
+            currentCookies.TryGetValue("mid", out string mid);
 
             if (string.IsNullOrEmpty(stoken) || string.IsNullOrEmpty(mid))
             {
-                Debug.WriteLine("本地Cookie中缺少stoken或mid，无法刷新");
-                if (!isManual) return;
-                SendErrorNotification("本地Cookie中缺少stoken或mid，无法刷新");
-                return;
+                Debug.WriteLine("传入的Cookie中缺少stoken或mid，无法刷新");
+                if (isManual) SendErrorNotification("本地Cookie中缺少stoken或mid，无法刷新");
+                return null;
             }
+
+           
+            string cookieStr = BuildCookieString(currentCookies);
 
             if (!isManual)
             {
-                bool isValid = await CheckCookieValidAsync(config.Account.Cookie);
+                bool isValid = await CheckCookieValidAsync(cookieStr);
                 if (isValid)
                 {
-                    Debug.WriteLine("当前 Cookie 仍然有效且获取到了角色列表，无需刷新");
-                    return;
+                    Debug.WriteLine("当前 Cookie 仍然有效，无需刷新");
+                    return null; 
                 }
             }
 
-            Debug.WriteLine(isManual ? "用户手动触发Coken刷新..." : "当前Cookie已失效或角色列表为空，开始执行Coken刷新...");
-            
-            WeakReferenceMessenger.Default.Send(new NotificationMessage("Cookie刷新", isManual ? "正在执行手动刷新..." : "Cookie已失效，正在执行刷新...", NotificationType.Warning, 3000));
+            Debug.WriteLine(isManual ? "用户手动触发Cookie刷新..." : "当前Cookie已失效，开始执行Cookie刷新...");
+
+            WeakReferenceMessenger.Default.Send(new NotificationMessage(
+                "Cookie刷新",
+                isManual ? "正在执行手动刷新..." : "Cookie已失效，正在执行刷新...",
+                NotificationType.Warning, 3000));
 
             string authCookie = $"stoken={stoken}; mid={mid}";
-            
+
             string webTicket = await CreateWebQrCodeAsync();
             if (string.IsNullOrEmpty(webTicket))
             {
                 if (isManual) SendErrorNotification("创建 WebTicket 失败");
-                return;
+                return null;
             }
 
             bool scanResult = await SimulateAppActionAsync(ApiEndpoints.PassportScanQrLoginUrl, webTicket, authCookie);
             if (!scanResult)
             {
                 if (isManual) SendErrorNotification("模拟扫码请求失败");
-                return;
+                return null;
             }
 
             await Task.Delay(500);
-            
+
             bool confirmResult = await SimulateAppActionAsync(ApiEndpoints.PassportConfirmQrLoginUrl, webTicket, authCookie);
             if (!confirmResult)
             {
                 if (isManual) SendErrorNotification("模拟确认登录请求失败");
-                return;
+                return null;
             }
 
             var v2Cookies = await GetWebQrStatusAndExtractCookiesAsync(webTicket);
             if (v2Cookies != null && v2Cookies.Count > 0)
             {
+                
                 foreach (var kvp in v2Cookies)
                 {
-                    cookieDict[kvp.Key] = kvp.Value;
+                    currentCookies[kvp.Key] = kvp.Value;
                 }
 
-                config.Account.Cookie = BuildCookieString(cookieDict);
-
-                var options = new JsonSerializerOptions
-                {
-                    WriteIndented = true,
-                    Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-                };
-                var newJson = JsonSerializer.Serialize(config, options);
-                await File.WriteAllTextAsync(path, newJson);
-
                 Debug.WriteLine("Cookie刷新成功");
-                WeakReferenceMessenger.Default.Send(new NotificationMessage("Cookie刷新", isManual ? "Cookie手动刷新已完成，新凭据已存盘" : "Cookie自动刷新已完成，新凭据已存盘，请重新启动软件", NotificationType.Success, 3000));
-                return;
+                WeakReferenceMessenger.Default.Send(new NotificationMessage(
+                    "Cookie刷新",
+                    isManual ? "Cookie手动刷新已完成，新凭据已生效" : "Cookie自动刷新已完成，新凭据已生效",
+                    NotificationType.Success, 3000));
+                return currentCookies; 
             }
             else
             {
                 if (isManual) SendErrorNotification("获取新 Cookie 失败");
+                return null;
             }
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"Cookie刷新异常: {ex.Message}");
-            WeakReferenceMessenger.Default.Send(new NotificationMessage("Cookie刷新失败", $"Cookie刷新过程中出现异常: {ex.Message}", NotificationType.Error, 4000));
+            WeakReferenceMessenger.Default.Send(new NotificationMessage(
+                "Cookie刷新失败",
+                $"Cookie刷新过程中出现异常: {ex.Message}",
+                NotificationType.Error, 4000));
+            return null;
         }
     }
 
@@ -168,19 +161,20 @@ public class TokenRefreshService
             var responseText = await response.Content.ReadAsStringAsync();
 
             var result = JsonSerializer.Deserialize<ApiResponse<AccountInfoData>>(responseText, _jsonOptions);
-            
+
             if (result != null && result.RetCode == 0 && result.Data?.List != null && result.Data.List.Count > 0)
             {
-                return true; 
+                return true;
             }
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"验证 Cookie 状态时发生异常: {ex.Message}");
         }
-        
+
         return false;
     }
+
 
     private Dictionary<string, string> ParseCookieString(string cookieString)
     {
@@ -206,6 +200,7 @@ public class TokenRefreshService
         }
         return string.Join("; ", list);
     }
+
 
     private async Task<string> CreateWebQrCodeAsync()
     {

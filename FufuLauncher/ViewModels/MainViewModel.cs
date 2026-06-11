@@ -903,33 +903,53 @@ private void BackgroundVideoPlayer_MediaFailed(MediaPlayer sender, MediaPlayerFa
             IsCheckinButtonEnabled = true;
             CheckinButtonText = "立即签到";
         }
-        
+
         private async Task LoadCheckinStatusAsync()
         {
             if (_localSettingsService == null) return;
-            
+
             var isIntlRaw = await _localSettingsService.ReadSettingAsync("IsInternationalAccount");
             _isInternationalAccount = isIntlRaw != null && isIntlRaw.ToString().ToLower() == "true";
 
-            try 
+            try
             {
                 var targetUidObj = await _localSettingsService.ReadSettingAsync("CustomCheckinUid");
                 string targetUid = targetUidObj?.ToString();
 
-                var (status, summary) = await _checkinService.GetCheckinStatusAsync(targetUid);
+                
+                var accountManager = App.GetService<AccountManager>();
+                var activeId = accountManager.ActiveAccountId;
+                if (activeId == null)
+                {
+                    CheckinStatusText = "未登录";
+                    CheckinSummary = "请先登录账户";
+                    UpdateCheckinIconState("Fail");
+                    return;
+                }
+
+                var cookies = await accountManager.LoadCookiesAsync(activeId);
+                var entry = accountManager.GetActiveAccountEntry();
+                if (cookies == null || entry == null)
+                {
+                    CheckinStatusText = "凭证加载失败";
+                    CheckinSummary = "无法获取账户凭证";
+                    UpdateCheckinIconState("Fail");
+                    return;
+                }
+
+                string serverType = entry.ServerType; 
+
+                var (status, summary) = await _checkinService.GetCheckinStatusAsync(targetUid, cookies, serverType);
 
                 CheckinStatusText = status;
                 CheckinSummary = summary;
-
                 UpdateCheckinIconState(status);
-        
+
                 if (!_hasAttemptedAutoCheckin)
                 {
                     var autoCheckinObj = await _localSettingsService.ReadSettingAsync("IsAutoCheckinEnabled");
                     bool isAutoCheckinEnabled = autoCheckinObj != null && Convert.ToBoolean(autoCheckinObj);
-
-                    bool isSigned = !string.IsNullOrEmpty(status) && 
-                                    (status.Contains("成功") || status.Contains("已"));
+                    bool isSigned = !string.IsNullOrEmpty(status) && (status.Contains("成功") || status.Contains("已"));
 
                     if (isAutoCheckinEnabled && !isSigned)
                     {
@@ -945,52 +965,52 @@ private void BackgroundVideoPlayer_MediaFailed(MediaPlayer sender, MediaPlayerFa
                 UpdateCheckinIconState("Fail");
             }
         }
-        
-        
 
-private async Task ExecuteCheckinAsync()
-{
-    IsCheckinButtonEnabled = false;
-    CheckinButtonText = "签到中...";
 
-    await RefreshSettingsAsync();
 
-    try
-    {
-        var progress = new Progress<string>(msg =>
+        private async Task ExecuteCheckinAsync()
         {
-            _dispatcherQueue.TryEnqueue(() =>
+            IsCheckinButtonEnabled = false;
+            CheckinButtonText = "签到中...";
+
+            //await RefreshSettingsAsync();
+
+            try
             {
-                CheckinButtonText = msg;
-            });
-        });
+                var progress = new Progress<string>(msg =>
+                {
+                    _dispatcherQueue.TryEnqueue(() =>
+                    {
+                        CheckinButtonText = msg;
+                    });
+                });
 
-        var unifiedResult = await _unifiedCheckinService.ExecuteAllCheckinsAsync(progress);
+                var unifiedResult = await _unifiedCheckinService.ExecuteAllCheckinsAsync(progress);
 
-        CheckinStatusText = unifiedResult.OverallSuccess ? "签到完成" : "签到部分失败";
-        CheckinSummary = unifiedResult.SummaryMessage;
-        UpdateCheckinIconState(unifiedResult.OverallSuccess ? "已签到" : "Fail");
+                CheckinStatusText = unifiedResult.OverallSuccess ? "签到完成" : "签到部分失败";
+                CheckinSummary = unifiedResult.SummaryMessage;
+                UpdateCheckinIconState(unifiedResult.OverallSuccess ? "已签到" : "Fail");
 
-        _notificationService.Show("签到完成", unifiedResult.GetDetailedSummary(), unifiedResult.NotificationType, 5000);
-    }
-    catch (Exception ex)
-    {
-        CheckinStatusText = "执行失败";
-        CheckinSummary = ex.Message;
-        UpdateCheckinIconState("Fail");
-        _notificationService.Show("签到异常", ex.Message, NotificationType.Error, 3000);
-    }
-    finally
-    {
-        await Task.Delay(2000);
-        await LoadCheckinStatusAsync();
-    }
-}
-
-
+                _notificationService.Show("签到完成", unifiedResult.GetDetailedSummary(), unifiedResult.NotificationType, 5000);
+            }
+            catch (Exception ex)
+            {
+                CheckinStatusText = "执行失败";
+                CheckinSummary = ex.Message;
+                UpdateCheckinIconState("Fail");
+                _notificationService.Show("签到异常", ex.Message, NotificationType.Error, 3000);
+            }
+            finally
+            {
+                await Task.Delay(2000);
+                await LoadCheckinStatusAsync();
+            }
+        }
 
 
-private void RefreshPresetsActiveStatus(string activeId)
+
+
+        private void RefreshPresetsActiveStatus(string activeId)
 {
     foreach (var preset in PinnedPresets)
     {
@@ -1228,11 +1248,24 @@ private void QuickSwitchPreset(PresetModel targetPreset)
         {
             try
             {
+                var accountManager = App.GetService<AccountManager>();
+                var activeId = accountManager.ActiveAccountId;
+
+                if (activeId == null)
+                {
+                    Debug.WriteLine("[DailyNote] 未找到绑定账号");
+                    return;
+                }
+
+                var cookies = await accountManager.LoadCookiesAsync(activeId);
+                var entry = accountManager.GetActiveAccountEntry();
+                if (cookies == null || entry == null) return;
+
                 var customUid = await _localSettingsService.ReadSettingAsync("CustomCheckinUid");
                 string targetUid = customUid?.ToString()?.Trim();
 
-                var uids = await _checkinService.GetBoundUidsAsync();
-        
+                
+                var uids = await _checkinService.GetBoundUidsAsync(cookies, entry.ServerType);
                 if (uids.Count == 0)
                 {
                     Debug.WriteLine("[DailyNote] 未找到绑定账号");
@@ -1242,7 +1275,11 @@ private void QuickSwitchPreset(PresetModel targetPreset)
                 string roleId = string.IsNullOrEmpty(targetUid) ? uids[0] : targetUid;
                 string server = roleId.StartsWith("5") ? "cn_qd01" : "cn_gf01";
 
-                var dailyNoteData = await _dailyNoteCardService.LoadCardDataAsync(roleId, server);
+                var dailyNoteData = await _dailyNoteCardService.LoadCardDataAsync(roleId, server, cookies);
+
+
+
+
 
                 await UpdateUI(() =>
                 {

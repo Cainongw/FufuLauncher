@@ -144,6 +144,8 @@ public partial class App : Application
                     services.AddTransient<PanelPage>();
                     services.AddSingleton<IUserInfoService, UserInfoService>();
 
+                    services.AddSingleton<AccountManager>();
+
                     services.AddLogging(builder =>
                     {
                         builder.ClearProviders(); 

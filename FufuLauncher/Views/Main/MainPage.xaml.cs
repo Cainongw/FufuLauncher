@@ -1,8 +1,11 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using CommunityToolkit.Mvvm.Messaging;
 using FufuLauncher.Contracts.Services;
 using FufuLauncher.Messages;
 using FufuLauncher.Models;
+using FufuLauncher.Services;
+using FufuLauncher.Services.Background;
 using FufuLauncher.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -11,7 +14,6 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Navigation;
-using FufuLauncher.Services.Background;
 
 namespace FufuLauncher.Views;
 
@@ -208,11 +210,38 @@ public sealed partial class MainPage : Page
     {
 
     }
-    
-private async void RefreshTokenButton_Click(object sender, RoutedEventArgs e)
+
+    private async void RefreshTokenButton_Click(object sender, RoutedEventArgs e)
     {
-        var tokenService = new FufuLauncher.Services.TokenRefreshService();
-        await tokenService.RefreshCookieAsync(true);
+        try
+        {
+            var accountManager = App.GetService<AccountManager>();
+            var activeId = accountManager.ActiveAccountId;
+            if (activeId == null)
+            {
+                WeakReferenceMessenger.Default.Send(new NotificationMessage("刷新失败", "没有活跃账户", NotificationType.Error));
+                return;
+            }
+
+            var cookies = await accountManager.LoadCookiesAsync(activeId);
+            if (cookies == null || cookies.Count == 0)
+            {
+                WeakReferenceMessenger.Default.Send(new NotificationMessage("刷新失败", "无法加载账户凭证", NotificationType.Error));
+                return;
+            }
+
+            var tokenService = new TokenRefreshService();
+            var newCookies = await tokenService.RefreshCookieAsync(cookies, true);
+
+            if (newCookies != null)
+            {
+                await accountManager.UpdateCookiesAsync(activeId, newCookies);
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"手动刷新异常: {ex.Message}");
+        }
     }
 
     private async void RefreshDailyNoteButton_Click(object sender, RoutedEventArgs e)
@@ -697,6 +726,10 @@ private void OnOpenGachaAnalysisClick(object sender, RoutedEventArgs e)
 
     private void TransitionToBanner(BannerItem targetBanner)
     {
+        if (ViewModel == null) 
+        {
+            return;
+        }
         if (targetBanner == null)
         {
             return;

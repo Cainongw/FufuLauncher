@@ -10,8 +10,9 @@ using FufuLauncher.Contracts.Services;
 using FufuLauncher.Messages;
 using FufuLauncher.Models;
 using FufuLauncher.Services;
-using MihoyoBBS;
 using FufuLauncher.Views;
+using MihoyoBBS;
+using Windows.ApplicationModel.DataTransfer;
 
 namespace FufuLauncher.ViewModels;
 
@@ -25,7 +26,7 @@ public partial class AccountViewModel : ObservableRecipient
     private readonly INavigationService _navigationService;
     private readonly Microsoft.UI.Dispatching.DispatcherQueue _dispatcherQueue;
     private const int MaxAccounts = 4;
-    private Dictionary<string, string> _accountFileMap = new();
+    private readonly AccountManager _accountManager;
     #endregion
 
     #region 属性
@@ -94,14 +95,15 @@ public partial class AccountViewModel : ObservableRecipient
         ILocalSettingsService localSettingsService,
         IUserInfoService userInfoService,
         IUserConfigService userConfigService,
-        INavigationService navigationService)
+        INavigationService navigationService,
+        AccountManager accountManager)
     {
         _localSettingsService = localSettingsService;
         _userInfoService = userInfoService;
         _userConfigService = userConfigService;
         _navigationService = navigationService;
         _dispatcherQueue = App.MainWindow.DispatcherQueue;
-
+        _accountManager = accountManager;
         LoginCommand = new AsyncRelayCommand(LoginAsync);
         LogoutCommand = new AsyncRelayCommand(LogoutAsync);
         LoadUserInfoCommand = new AsyncRelayCommand(LoadUserInfoAsync);
@@ -119,7 +121,41 @@ public partial class AccountViewModel : ObservableRecipient
     public async Task DeleteAccountAsync(AccountInfo account)
     {
         if (account == null) return;
-        await DeleteAccountByUidAsync(account.Stuid);
+        var accountId = account.AccountId; 
+        bool isCurrentAccount = _accountManager.ActiveAccountId == accountId;
+
+        try
+        {
+            await _accountManager.DeleteAccountAsync(accountId);
+
+            
+            RefreshSavedAccountsList();
+
+            if (isCurrentAccount)
+            {
+                var activeId = _accountManager.ActiveAccountId;
+                if (activeId != null)
+                {
+                    await LoadActiveAccountAsync(activeId);
+                }
+                else
+                {
+                    
+                    RunOnUIThread(() =>
+                    {
+                        CurrentAccount = null;
+                        GameRolesInfo = null;
+                        UserFullInfo = null;
+                        LoginButtonText = "登录米游社";
+                        StatusMessage = "没有账户了";
+                    });
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            RunOnUIThread(() => StatusMessage = $"删除失败: {ex.Message}");
+        }
     }
     public async Task LoadUserInfoAsync()
     {
@@ -128,104 +164,88 @@ public partial class AccountViewModel : ObservableRecipient
         try
         {
             IsLoadingUserInfo = true;
-            StatusMessage = "正在加载用户信息...";
+            RunOnUIThread(() => StatusMessage = "正在加载用户信息...");
 
-            var configPath = GetCurrentConfigPath();
 
-            Debug.WriteLine($"========== [LoadUserInfo] 开始加载 ==========");
-            Debug.WriteLine($"[LoadUserInfo] 目标配置文件: {configPath}");
-            Debug.WriteLine($"[LoadUserInfo] 完整路径: {configPath}");
-            Debug.WriteLine($"[LoadUserInfo] 文件是否存在: {File.Exists(configPath)}");
-
-            if (!File.Exists(configPath))
+            var activeId = _accountManager.ActiveAccountId;
+            if (activeId == null)
             {
-                Debug.WriteLine("[LoadUserInfo] 失败原因: 配置文件不存在");
-                StatusMessage = "请先登录";
+                Debug.WriteLine("[LoadUserInfo] 无活跃账户");
+                RunOnUIThread(() => StatusMessage = "请先登录");
                 return;
             }
 
-            var json = await File.ReadAllTextAsync(configPath);
-            var config = JsonSerializer.Deserialize<Config>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-            Debug.WriteLine($"[LoadUserInfo] Cookie读取状态: {(string.IsNullOrEmpty(config?.Account?.Cookie) ? "空" : "正常")}");
-
-            if (string.IsNullOrEmpty(config?.Account?.Cookie))
+            var cookies = await _accountManager.LoadCookiesAsync(activeId);
+            var entry = _accountManager.GetActiveAccountEntry();
+            if (cookies == null || entry == null)
             {
-                StatusMessage = "请先登录";
+                Debug.WriteLine("[LoadUserInfo] 无法读取账户数据");
+                RunOnUIThread(() => StatusMessage = "请先登录");
                 return;
             }
 
-            Debug.WriteLine("[LoadUserInfo] 正在调用远程API...");
-            var rolesTask = _userInfoService.GetUserGameRolesAsync(config.Account.Cookie);
-            var userInfoTask = _userInfoService.GetUserFullInfoAsync(config.Account.Cookie);
+            
+            string cookieString = string.Join("; ", cookies.Select(kv => $"{kv.Key}={kv.Value}"));
 
+            Debug.WriteLine($"[LoadUserInfo] 正在调用远程API... (账户: {entry.Id})");
+
+          
+            var rolesTask = _userInfoService.GetUserGameRolesAsync(cookieString);
+            var userInfoTask = _userInfoService.GetUserFullInfoAsync(cookieString);
             await Task.WhenAll(rolesTask, userInfoTask);
 
             var newRolesInfo = await rolesTask;
             var newUserFullInfo = await userInfoTask;
 
-            var oldRolesJson = JsonSerializer.Serialize(GameRolesInfo);
-            var newRolesJson = JsonSerializer.Serialize(newRolesInfo);
-            if (oldRolesJson != newRolesJson)
-            {
+           
+            if (JsonSerializer.Serialize(GameRolesInfo) != JsonSerializer.Serialize(newRolesInfo))
                 GameRolesInfo = newRolesInfo;
-            }
-
-            var oldInfoJson = JsonSerializer.Serialize(UserFullInfo);
-            var newInfoJson = JsonSerializer.Serialize(newUserFullInfo);
-            if (oldInfoJson != newInfoJson)
-            {
+            if (JsonSerializer.Serialize(UserFullInfo) != JsonSerializer.Serialize(newUserFullInfo))
                 UserFullInfo = newUserFullInfo;
-            }
 
             Debug.WriteLine($"[LoadUserInfo] API返回状态: RolesRet={GameRolesInfo?.retcode}, UserRet={UserFullInfo?.retcode}");
-            Debug.WriteLine($"[LoadUserInfo] GameRolesInfo.data.list.Count: {GameRolesInfo?.data?.list?.Count ?? -1}");
+
 
             var userInfo = UserFullInfo?.data?.user_info;
             var hasBoundRole = GameRolesInfo?.data?.list?.Count > 0;
             var role = GameRolesInfo?.data?.list?.FirstOrDefault();
 
-            config.Display = new DisplayConfig
-            {
-                Nickname = userInfo?.nickname ?? role?.nickname ?? $"用户 {config.Account.Stuid}",
-                GameUid = role?.game_uid ?? "",
-                Server = role?.region_name ?? "",
-                AvatarUrl = userInfo?.avatar_url ?? "ms-appx:///Assets/DefaultAvatar.png",
-                Level = role?.level.ToString() ?? "",
-                Sign = string.IsNullOrEmpty(userInfo?.introduce) ? "这个人很懒，什么都没有写..." : userInfo.introduce,
-                IpRegion = userInfo?.ip_region ?? "未知",
-                Gender = userInfo?.gender ?? 0,
-                HasBoundRole = hasBoundRole
-            };
+            var nickname = userInfo?.nickname ?? role?.nickname ?? $"用户 {entry.Stuid}";
+            var avatarUrl = userInfo?.avatar_url ?? "ms-appx:///Assets/DefaultAvatar.png";
+            var gameUid = role?.game_uid ?? "";
+            var server = role?.region_name ?? "";
+            var level = role?.level.ToString() ?? "";
+            var sign = string.IsNullOrEmpty(userInfo?.introduce) ? "这个人很懒，什么都没有写..." : userInfo.introduce;
+            var ipRegion = userInfo?.ip_region ?? "未知";
+            var gender = userInfo?.gender ?? 0;
 
-            if (string.IsNullOrEmpty(config.Account.Stoken) || string.IsNullOrEmpty(config.Account.Mid))
+            await _accountManager.UpdateAccountMetaAsync(entry.Id, nickname, avatarUrl);
+
+            RunOnUIThread(() =>
             {
-                var cookie = config.Account.Cookie;
-                if (!string.IsNullOrEmpty(cookie))
+                if (CurrentAccount == null)
                 {
-                    if (string.IsNullOrEmpty(config.Account.Stoken))
-                    {
-                        var stokenMatch = System.Text.RegularExpressions.Regex.Match(cookie, @"stoken=([^;]+)");
-                        if (stokenMatch.Success) config.Account.Stoken = stokenMatch.Groups[1].Value;
-                    }
-                    if (string.IsNullOrEmpty(config.Account.Mid))
-                    {
-                        var midMatch = System.Text.RegularExpressions.Regex.Match(cookie, @"mid=([^;]+)");
-                        if (midMatch.Success) config.Account.Mid = midMatch.Groups[1].Value;
-                    }
+                    CurrentAccount = new AccountInfo { AccountId = entry.Id, Stuid = entry.Stuid };
                 }
-            }
+                CurrentAccount.Nickname = nickname;
+                CurrentAccount.AvatarUrl = avatarUrl;
+                CurrentAccount.GameUid = gameUid;
+                CurrentAccount.Server = server;
+                CurrentAccount.Level = level;
+                CurrentAccount.Sign = sign;
+                CurrentAccount.IpRegion = ipRegion;
+                CurrentAccount.Gender = gender;
+                CurrentAccount.HasBoundRole = hasBoundRole;
 
-            var newJson = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
-            await File.WriteAllTextAsync(configPath, newJson);
+                StatusMessage = hasBoundRole ? "账户已登录" : "账户已登录（未绑定角色）";
+            });
+            Debug.WriteLine($"[LoadUserInfo] 用户信息已更新，HasBoundRole={hasBoundRole}");
 
-            Debug.WriteLine($"[LoadUserInfo] 已保存 Display 到 config.json，HasBoundRole={hasBoundRole}");
-            await LoadAccountInfo();
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"[LoadUserInfo] 异常: {ex.Message}");
-            StatusMessage = $"加载失败: {ex.Message}";
+            RunOnUIThread(() => StatusMessage = $"加载失败: {ex.Message}");
         }
         finally
         {
@@ -245,34 +265,46 @@ public partial class AccountViewModel : ObservableRecipient
     {
         try
         {
-            var configPath = GetCurrentConfigPath();
-            if (!File.Exists(configPath))
+            var activeId = _accountManager.ActiveAccountId;
+            if (activeId == null)
             {
-                StatusMessage = "未找到登录信息";
-                WeakReferenceMessenger.Default.Send(new NotificationMessage("复制失败", "未找到登录信息", NotificationType.Error));
+                RunOnUIThread(() =>
+                {
+                    StatusMessage = "未找到登录信息";
+                    WeakReferenceMessenger.Default.Send(new NotificationMessage("复制失败", "未找到登录信息", NotificationType.Error));
+                });
                 return;
             }
 
-            var json = await File.ReadAllTextAsync(configPath);
-            var config = JsonSerializer.Deserialize<Config>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-            if (!string.IsNullOrEmpty(config?.Account?.Cookie))
+            var cookies = await _accountManager.LoadCookiesAsync(activeId);
+            if (cookies == null || cookies.Count == 0)
             {
-                var dataPackage = new Windows.ApplicationModel.DataTransfer.DataPackage();
-                dataPackage.SetText(config.Account.Cookie);
-                Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dataPackage);
+                RunOnUIThread(() =>
+                {
+                    StatusMessage = "未找到有效的 Cookie";
+                    WeakReferenceMessenger.Default.Send(new NotificationMessage("复制失败", "未找到有效的 Cookie", NotificationType.Error));
+                });
+                return;
+            }
+
+            string cookieString = string.Join("; ", cookies.Select(kv => $"{kv.Key}={kv.Value}"));
+
+            RunOnUIThread(() =>
+            {
+                var dataPackage = new DataPackage();
+                dataPackage.SetText(cookieString);
+                Clipboard.SetContent(dataPackage);
                 StatusMessage = "Cookie 已复制到剪切板";
                 WeakReferenceMessenger.Default.Send(new NotificationMessage("复制成功", "Cookie 已成功复制到剪贴板", NotificationType.Success));
-                return;
-            }
-
-            StatusMessage = "未找到有效的 Cookie";
-            WeakReferenceMessenger.Default.Send(new NotificationMessage("复制失败", "未找到有效的 Cookie", NotificationType.Error));
+            });
         }
         catch (Exception ex)
         {
-            StatusMessage = $"复制失败: {ex.Message}";
-            WeakReferenceMessenger.Default.Send(new NotificationMessage("复制失败", ex.Message, NotificationType.Error));
+            RunOnUIThread(() =>
+            {
+                StatusMessage = $"复制失败: {ex.Message}";
+                WeakReferenceMessenger.Default.Send(new NotificationMessage("复制失败", ex.Message, NotificationType.Error));
+            });
         }
     }
     private async Task OpenSecurityCenterAsync() => await OpenSecurityWindowInternalAsync(ApiEndpoints.AccountSecurityUrl, "正在打开账号安全中心...");
@@ -280,469 +312,273 @@ public partial class AccountViewModel : ObservableRecipient
     {
         try
         {
-            StatusMessage = loadingMsg;
-            var configPath = GetCurrentConfigPath();
-            if (!File.Exists(configPath)) return;
+            RunOnUIThread(() => StatusMessage = loadingMsg);
+            var activeId = _accountManager.ActiveAccountId;
+            if (activeId == null) return;
 
-            var json = await File.ReadAllTextAsync(configPath);
-            var config = JsonSerializer.Deserialize<Config>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            if (!string.IsNullOrEmpty(config?.Account?.Cookie))
+            var cookies = await _accountManager.LoadCookiesAsync(activeId);
+            if (cookies == null || cookies.Count == 0) return;
+
+            string cookieString = string.Join("; ", cookies.Select(kv => $"{kv.Key}={kv.Value}"));
+
+            RunOnUIThread(() =>
             {
-                var window = new SecurityWebWindow(config.Account.Cookie, url);
+                var window = new SecurityWebWindow(cookieString, url);
                 window.Activate();
                 StatusMessage = "窗口已打开";
-            }
+            });
         }
         catch (Exception ex)
         {
-            StatusMessage = $"操作失败: {ex.Message}";
+            RunOnUIThread(() => StatusMessage = $"操作失败: {ex.Message}");
         }
     }
+    private async Task LoadActiveAccountAsync(string accountId)
+    {
+        var cookies = await _accountManager.LoadCookiesAsync(accountId);
+        var entry = _accountManager.GetActiveAccountEntry();
 
+        if (cookies == null || entry == null)
+        {
+            RunOnUIThread(() => CurrentAccount = null);
+            return;
+        }
+
+        var info = new AccountInfo
+        {
+            AccountId = entry.Id,
+            Nickname = entry.Nickname ?? "未命名",
+            Stuid = entry.Stuid,
+            AvatarUrl = entry.AvatarUrl ?? "ms-appx:///Assets/DefaultAvatar.png",
+            Server = entry.ServerType
+        };
+
+        RunOnUIThread(() => CurrentAccount = info);
+
+        _ = LoadUserInfoAsync();
+    }
     private async Task OpenGenshinDataAsync()
     {
         try
         {
-            StatusMessage = "正在打开原神数据窗口...";
-            var window = App.GetService<GenshinDataWindow>();
-            if (window.Visible) window.Activate();
-            else window.Activate();
-            StatusMessage = "窗口已打开";
+            RunOnUIThread(() =>
+            {
+                StatusMessage = "正在打开原神数据窗口...";
+                var window = App.GetService<GenshinDataWindow>();
+                window.Activate();
+                StatusMessage = "窗口已打开";
+            });
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"ERROR: 打开原神数据窗口失败: {ex.Message}");
-            StatusMessage = $"打开失败: {ex.Message}";
+            RunOnUIThread(() => StatusMessage = $"打开失败: {ex.Message}");
         }
+    }
+
+    private void RefreshSavedAccountsList()
+    {
+        RunOnUIThread(() =>
+        {
+            SavedAccounts.Clear();
+            foreach (var entry in _accountManager.GetAllAccounts())
+            {
+                SavedAccounts.Add(new AccountInfo
+                {
+                    AccountId = entry.Id,
+                    Nickname = entry.Nickname ?? "未命名",
+                    Stuid = entry.Stuid,
+                    AvatarUrl = entry.AvatarUrl ?? "ms-appx:///Assets/DefaultAvatar.png"
+                });
+            }
+            OnPropertyChanged(nameof(HasSavedAccounts));
+        });
+    }
+
+    private void RunOnUIThread(Action action)
+    {
+        if (_dispatcherQueue == null) return;
+        if (_dispatcherQueue.HasThreadAccess)
+            action();
+        else
+            _dispatcherQueue.TryEnqueue(() => action());
     }
     #endregion
 
     #region 账号数据管理（加载、保存、备份）
-    private string GetCurrentConfigPath()
-    {
 
-        return Path.Combine(Helpers.AppPaths.DataDir, "config.json");
-    }
     private async Task LoadAccountInfo()
     {
         try
         {
             Debug.WriteLine("========== [LoadAccountInfo] 开始加载账户信息 ==========");
-            var configPath = GetCurrentConfigPath();
 
-            if (!File.Exists(configPath))
+            var activeId = _accountManager.ActiveAccountId;
+            if (activeId == null)
             {
-                Debug.WriteLine("[LoadAccountInfo] 配置文件不存在");
-                CurrentAccount = null;
-                StatusMessage = "未找到登录信息";
+                Debug.WriteLine("[LoadAccountInfo] 无活跃账户");
+                RunOnUIThread(() =>
+                {
+                    CurrentAccount = null;
+                    StatusMessage = "未找到登录信息";
+                    LoginButtonText = "登录";
+                });
                 return;
             }
 
-            var json = await File.ReadAllTextAsync(configPath);
-            var config = JsonSerializer.Deserialize<Config>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-            if (config?.Display == null || string.IsNullOrEmpty(config.Account?.Cookie))
+            var cookies = await _accountManager.LoadCookiesAsync(activeId);
+            var entry = _accountManager.GetActiveAccountEntry();
+            if (cookies == null || entry == null)
             {
-                Debug.WriteLine("[LoadAccountInfo] 状态更新: 未登录");
-                CurrentAccount = null;
-                StatusMessage = "未找到登录信息";
+                Debug.WriteLine("[LoadAccountInfo] 无法加载活跃账户数据");
+                RunOnUIThread(() =>
+                {
+                    CurrentAccount = null;
+                    StatusMessage = "账户数据读取失败";
+                    LoginButtonText = "登录";
+                });
                 return;
             }
 
-            var display = config.Display;
-            if (CurrentAccount == null || CurrentAccount.GameUid != display.GameUid)
+            RunOnUIThread(() =>
             {
                 CurrentAccount = new AccountInfo
                 {
-                    Nickname = display.Nickname,
-                    Stuid = config.Account.Stuid,
-                    GameUid = display.GameUid,
-                    Server = display.Server,
-                    AvatarUrl = display.AvatarUrl,
-                    Level = display.HasBoundRole ? display.Level : "",
-                    Sign = display.Sign,
-                    IpRegion = display.IpRegion,
-                    Gender = display.Gender,
-                    HasBoundRole = display.HasBoundRole
+                    AccountId = entry.Id,
+                    Nickname = entry.Nickname ?? "未命名",
+                    Stuid = entry.Stuid,
+                    AvatarUrl = entry.AvatarUrl ?? "ms-appx:///Assets/DefaultAvatar.png",
+                    GameUid = entry.Stuid,       
+                    Server = entry.ServerType,
+                    HasBoundRole = false
                 };
-            }
-            else
-            {
-                CurrentAccount.Nickname = display.Nickname;
-                CurrentAccount.Stuid = config.Account.Stuid;
-                CurrentAccount.Server = display.Server;
-                CurrentAccount.AvatarUrl = display.AvatarUrl;
-                CurrentAccount.Level = display.HasBoundRole ? display.Level : "";
-                CurrentAccount.Sign = display.Sign;
-                CurrentAccount.IpRegion = display.IpRegion;
-                CurrentAccount.Gender = display.Gender;
-                CurrentAccount.HasBoundRole = display.HasBoundRole;
-            }
+                LoginButtonText = "重新登录";
+                StatusMessage = "账户已登录";
+            });
 
-            LoginButtonText = "重新登录";
-            StatusMessage = display.HasBoundRole ? "账户已登录" : "账户已登录（未绑定角色）";
-            await LoadSavedAccountsListAsync();
+            Debug.WriteLine($"[LoadAccountInfo] 已加载账户: {entry.Nickname} ({entry.Id})");
+
+
+            _ = LoadUserInfoAsync();
+
+            RefreshSavedAccountsList();
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"[LoadAccountInfo] 异常: {ex.Message}");
-            StatusMessage = $"加载账户信息失败: {ex.Message}";
-            CurrentAccount = null;
-        }
-    }
-    private async Task LoadSavedAccountsListAsync()
-    {
-        var newAccounts = new List<AccountInfo>();
-        _accountFileMap.Clear();
-
-        var baseDir = Helpers.AppPaths.DataDir;
-        var filesToTry = Directory.GetFiles(baseDir, "config*.json").ToList();
-        string currentStuid = CurrentAccount?.Stuid ?? "";
-
-        foreach (var file in filesToTry.Distinct())
-        {
-            if (!File.Exists(file)) continue;
-            try
+            RunOnUIThread(() =>
             {
-                var fileName = Path.GetFileName(file);
-               
-                if (fileName.Equals("config.json", StringComparison.OrdinalIgnoreCase) ||
-                    fileName.Equals("config.lab.json", StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                var json = await File.ReadAllTextAsync(file);
-                var config = JsonSerializer.Deserialize<Config>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                if (config?.Account == null || string.IsNullOrEmpty(config.Account.Stuid)) continue;
-
-                string stuid = config.Account.Stuid;
-                if (stuid == currentStuid) continue;
-                if (_accountFileMap.ContainsKey(stuid)) continue;
-
-                _accountFileMap[stuid] = fileName;
-                var accountInfo = new AccountInfo { Stuid = stuid, Nickname = $"用户 {stuid}" };
-                if (config.Display != null && !string.IsNullOrEmpty(config.Display.Nickname))
-                {
-                    accountInfo.Nickname = config.Display.Nickname;
-                    accountInfo.AvatarUrl = config.Display.AvatarUrl;
-                    accountInfo.Server = config.Display.Server;
-                    accountInfo.Level = config.Display.Level;
-                    accountInfo.Sign = config.Display.Sign;
-                    accountInfo.IpRegion = config.Display.IpRegion;
-                    accountInfo.Gender = config.Display.Gender;
-                    accountInfo.HasBoundRole = config.Display.HasBoundRole;
-                }
-                newAccounts.Add(accountInfo);
-            }
-            catch { }
-        }
-
-        
-        var dispatcher = _dispatcherQueue ?? App.MainWindow?.DispatcherQueue;
-        if (dispatcher != null)
-        {
-            dispatcher.TryEnqueue(() =>
-            {
-                SavedAccounts.Clear();
-                foreach (var acc in newAccounts) SavedAccounts.Add(acc);
-                OnPropertyChanged(nameof(HasSavedAccounts));
+                StatusMessage = $"加载账户信息失败: {ex.Message}";
+                CurrentAccount = null;
+                LoginButtonText = "登录";
             });
         }
-        else
-        {
-            SavedAccounts.Clear();
-            foreach (var acc in newAccounts) SavedAccounts.Add(acc);
-            OnPropertyChanged(nameof(HasSavedAccounts));
-        }
     }
-    private async Task ArchiveCurrentAccountAsync()
-    {
-        if (CurrentAccount == null) return;
 
-        var configPath = GetCurrentConfigPath();
-        if (!File.Exists(configPath)) return;
-
-        var json = await File.ReadAllTextAsync(configPath);
-        var config = JsonSerializer.Deserialize<Config>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-        if (config?.Account == null || string.IsNullOrEmpty(config.Account.Stuid)) return;
-
-        var isOsObj = await _localSettingsService.ReadSettingAsync("IsInternationalAccount");
-        bool isOs = isOsObj is bool b && b;
-        string backupName = isOs ? $"config.lab_{config.Account.Stuid}.json" : $"config_{config.Account.Stuid}.json";
-        string backupPath = Path.Combine(Helpers.AppPaths.DataDir, backupName);
-
-        File.Copy(configPath, backupPath, true);
-        Debug.WriteLine($"[ArchiveCurrentAccount] 已备份配置到: {backupName}");
-    }
     public async Task RefreshDataAsync()
     {
-        await LoadAccountInfo();          
-        await LoadSavedAccountsListAsync(); 
+        await LoadAccountInfo();
+        RefreshSavedAccountsList();
     }
     #endregion
 
     #region 登录/退出/切换/添加账号
     private async Task LoginAsync()
     {
+        if (_accountManager.GetAllAccounts().Count >= MaxAccounts)
+        {
+            StatusMessage = $"最多只能添加 {MaxAccounts} 个账户";
+            return;
+        }
         try
         {
-            StatusMessage = "正在打开登录窗口...";
+            RunOnUIThread(() => StatusMessage = "正在打开登录窗口...");
             var loginWindow = new LoginQrWindow();
-            loginWindow.Activate();
+            var (cookies, serverType) = await loginWindow.ShowAndWaitAsync();
 
-            var tcs = new TaskCompletionSource<bool>();
-            loginWindow.Closed += (s, e) => tcs.SetResult(loginWindow.DidLoginSucceed());
-            var success = await tcs.Task;
+            Debug.WriteLine($"[LoginAsync] 登录成功，Cookie 数量: {cookies.Count}, 服务器: {serverType}");
 
-            if (success)
-            {
-                StatusMessage = "登录成功，正在加载信息...";
-                await Task.Delay(500);
+            var entry = await _accountManager.AddAccountAsync(cookies, serverType, nickname: "新账户");
+            await _accountManager.SwitchAccountAsync(entry.Id);
 
-               
-                var activeFileObj = await _localSettingsService.ReadSettingAsync("ActiveConfigFile");
-                string activeFile = activeFileObj?.ToString() ?? "config.json";
-                string actualConfigPath = Path.Combine(Helpers.AppPaths.DataDir, activeFile);
+            await LoadActiveAccountAsync(entry.Id);
+            RefreshSavedAccountsList();
 
-                
-                string unifiedConfigPath = GetCurrentConfigPath(); 
-                if (!activeFile.Equals("config.json", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (File.Exists(actualConfigPath))
-                    {
-                        File.Copy(actualConfigPath, unifiedConfigPath, true);
-                        File.Delete(actualConfigPath);
-                        Debug.WriteLine($"[LoginAsync] 已将 {activeFile} 迁移到 config.json");
-                    }
-                    await _localSettingsService.SaveSettingAsync("ActiveConfigFile", "config.json");
-                }
-
-                
-                if (File.Exists(unifiedConfigPath))
-                {
-                    var json = await File.ReadAllTextAsync(unifiedConfigPath);
-                    var config = JsonSerializer.Deserialize<Config>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                    if (config?.Account != null && !string.IsNullOrEmpty(config.Account.Cookie))
-                        await _userInfoService.SaveUserDataAsync(config.Account.Cookie, config.Account.Stuid);
-                }
-
-                await LoadAccountInfo();
-                await LoadUserInfoAsync();
-                StatusMessage = "登录成功";
-            }
-            else
-            {
-                StatusMessage = "登录已取消";
-                await LoadAccountInfo();
-            }
+            RunOnUIThread(() => StatusMessage = "登录成功");
+        }
+        catch (TaskCanceledException)
+        {
+            RunOnUIThread(() => StatusMessage = "登录已取消");
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[LoginAsync] 严重异常: {ex.Message}");
-            StatusMessage = $"登录出错: {ex.Message}";
+            Debug.WriteLine($"[LoginAsync] 异常: {ex.Message}");
+            RunOnUIThread(() => StatusMessage = $"登录出错: {ex.Message}");
         }
     }
     private async Task LogoutAsync()
     {
         try
         {
-            Debug.WriteLine("[Logout] 开始退出...");
+            
+            _accountManager.Logout();
 
-            // 1. 备份当前账号（自动根据 IsInternationalAccount 生成正确文件名）
-            if (CurrentAccount != null)
-                await ArchiveCurrentAccountAsync();
-
-            // 2. 清除主配置文件 config.json 中的敏感字段（保留文件结构）
-            var configPath = GetCurrentConfigPath();
-            if (File.Exists(configPath))
+           
+            RunOnUIThread(() =>
             {
-                var json = await File.ReadAllTextAsync(configPath);
-                var config = JsonSerializer.Deserialize<Config>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                if (config?.Account != null)
-                {
-                    config.Account.Cookie = "";
-                    config.Account.Stuid = "";
-                    config.Account.Stoken = "";
-                    config.Account.Mid = "";
-                    var newJson = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
-                    await File.WriteAllTextAsync(configPath, newJson);
-                }
-            }
+                CurrentAccount = null;
+                GameRolesInfo = null;
+                UserFullInfo = null;
+                LoginButtonText = "登录米游社";
+                StatusMessage = "已退出登录";
+            });
 
-            // 3. 清理可能残留的国际服主配置（兼容旧版本）
-            var labConfigPath = Path.Combine(Helpers.AppPaths.DataDir, "config.lab.json");
-            if (File.Exists(labConfigPath)) File.Delete(labConfigPath);
-
-            // 4. 重置状态
-            await _localSettingsService.SaveSettingAsync("IsInternationalAccount", false);
-            CurrentAccount = null;
-            GameRolesInfo = null;
-            UserFullInfo = null;
-            LoginButtonText = "登录米游社";
-            StatusMessage = "已退出登录";
+           
+            RefreshSavedAccountsList();
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[Logout] 异常: {ex.Message}");
-            StatusMessage = $"退出失败: {ex.Message}";
-        }
-        finally
-        {
-            await LoadSavedAccountsListAsync();
+            RunOnUIThread(() => StatusMessage = $"退出失败: {ex.Message}");
         }
     }
     private async Task SwitchToAccountAsync(AccountInfo? targetAccount)
     {
-        if (targetAccount == null || !_accountFileMap.ContainsKey(targetAccount.Stuid)) return;
+        if (targetAccount == null) return;
 
-        try
-        {
-            await ArchiveCurrentAccountAsync();
-
-            var baseDir = Helpers.AppPaths.DataDir;
-            string sourceFile = _accountFileMap[targetAccount.Stuid];
-            string sourcePath = Path.Combine(baseDir, sourceFile);
-            string mainConfigPath = GetCurrentConfigPath();
-
-            if (File.Exists(sourcePath))
-            {
-                File.Copy(sourcePath, mainConfigPath, true);
-                Debug.WriteLine($"[SwitchToAccount] 已复制 {sourceFile} 到 config.json");
-            }
-
-            bool isOs = sourceFile.Contains(".lab");
-            await _localSettingsService.SaveSettingAsync("IsInternationalAccount", isOs);
-            await _localSettingsService.SaveSettingAsync("ActiveConfigFile", "config.json");
-
-            await LoadAccountInfo();
-            await LoadUserInfoAsync();
-            StatusMessage = "账户切换成功";
-        }
-        catch (Exception ex)
-        {
-            StatusMessage = $"切换失败: {ex.Message}";
-        }
+        await _accountManager.SwitchAccountAsync(targetAccount.AccountId);
+        await LoadActiveAccountAsync(targetAccount.AccountId);
+        RefreshSavedAccountsList();
+        RunOnUIThread(() => StatusMessage = "账户切换成功");
     }
     private async Task AddNewAccountAsync()
     {
-        if (SavedAccounts.Count + (CurrentAccount != null ? 1 : 0) >= MaxAccounts)
+        if (_accountManager.GetAllAccounts().Count >= MaxAccounts)
         {
-            StatusMessage = $"已达到最大账户数量限制 ({MaxAccounts}个)";
+            StatusMessage = $"最多只能添加 {MaxAccounts} 个账户";
             return;
         }
-
-        await ArchiveCurrentAccountAsync();
-
-        await _localSettingsService.SaveSettingAsync("ActiveConfigFile", "config.json");
-        await _localSettingsService.SaveSettingAsync("IsInternationalAccount", false);
-
-        var configPath = GetCurrentConfigPath();
-        if (File.Exists(configPath)) File.Delete(configPath);
-
-        CurrentAccount = null;
-        GameRolesInfo = null;
-        UserFullInfo = null;
-        await LoginAsync();
-    }
-    #endregion
-
-    #region 删除账号
-
-    private async Task DeleteAccountByUidAsync(string uid)
-    {
-        var baseDir = Helpers.AppPaths.DataDir;
-        bool isCurrentAccount = CurrentAccount?.Stuid == uid;
-
         try
         {
-            
-            SafeDeleteFile(Path.Combine(baseDir, $"config_{uid}.json"));
-            SafeDeleteFile(Path.Combine(baseDir, $"config.lab_{uid}.json"));
+            var loginWindow = new LoginQrWindow();
+            var (cookies, serverType) = await loginWindow.ShowAndWaitAsync();
 
-            
-            await TryDeleteMainConfigIfMatchAsync(Path.Combine(baseDir, "config.json"), uid);
-            await TryDeleteMainConfigIfMatchAsync(Path.Combine(baseDir, "config.lab.json"), uid);
+            Debug.WriteLine($"[AddNewAccount] 登录成功，Cookie 数量: {cookies.Count}, 服务器: {serverType}");
 
-            
-            foreach (var file in Directory.GetFiles(baseDir, "config*.json"))
-            {
-                var name = Path.GetFileName(file);
-                if (name.Equals("config.json", StringComparison.OrdinalIgnoreCase) ||
-                    name.Equals("config.lab.json", StringComparison.OrdinalIgnoreCase))
-                    continue;
-                if (name.Contains(uid))
-                    SafeDeleteFile(file);
-            }
+            var entry = await _accountManager.AddAccountAsync(cookies, serverType, nickname: "新账户");
+            await _accountManager.SwitchAccountAsync(entry.Id);
 
+            await LoadActiveAccountAsync(entry.Id);
+            RefreshSavedAccountsList();
+        }
+        catch (TaskCanceledException)
+        {
             
-            await LoadSavedAccountsListAsync();
-
-            
-            if (isCurrentAccount)
-            {
-                if (SavedAccounts.Count > 0)
-                {
-                    await SwitchToAccountAsync(SavedAccounts[0]);
-                }
-                else
-                {
-                    await ClearCurrentAccountStateAsync();
-                }
-            }
-
-            StatusMessage = $"账号 {uid} 已删除";
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[DeleteAccountByUid] 异常: {ex.Message}");
-            StatusMessage = $"删除失败: {ex.Message}";
+            RunOnUIThread(() => StatusMessage = $"添加账户失败: {ex.Message}");
         }
-    }
-
-    private async Task TryDeleteMainConfigIfMatchAsync(string configPath, string uid)
-    {
-        if (!File.Exists(configPath)) return;
-        var json = await File.ReadAllTextAsync(configPath);
-        var config = JsonSerializer.Deserialize<Config>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-        if (config?.Account?.Stuid == uid)
-            SafeDeleteFile(configPath);
-    }
-
-    private void SafeDeleteFile(string path)
-    {
-        try
-        {
-            if (File.Exists(path)) File.Delete(path);
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"删除文件失败 {path}: {ex.Message}");
-        }
-    }
-
-    private async Task ClearCurrentAccountStateAsync()
-    {
-        await _userConfigService.SaveDisplayConfigAsync(new UserDisplayConfig());
-        var configPath = GetCurrentConfigPath();
-        if (File.Exists(configPath))
-        {
-            var json = await File.ReadAllTextAsync(configPath);
-            var config = JsonSerializer.Deserialize<Config>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            if (config?.Account != null)
-            {
-                config.Account.Cookie = "";
-                config.Account.Stuid = "";
-                config.Account.Stoken = "";
-                config.Account.Mid = "";
-                var newJson = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
-                await File.WriteAllTextAsync(configPath, newJson);
-            }
-        }
-        await _localSettingsService.SaveSettingAsync("IsInternationalAccount", false);
-        CurrentAccount = null;
-        GameRolesInfo = null;
-        UserFullInfo = null;
-        LoginButtonText = "登录米游社";
     }
     #endregion
- 
+
 }
