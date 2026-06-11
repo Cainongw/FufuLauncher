@@ -23,8 +23,8 @@ public static class AppPaths
     public static string GachaDataFile => Path.Combine(DataDir, "gacha_data.json");
     public static string MetadataDb => Path.Combine(DataDir, "metadata.db");
     public static string FufuConfigFile => Path.Combine(DataDir, "FufuConfig.cfg");
-    public static string ConfigFile => Path.Combine(DataDir, "config.json");
-    public static string ConfigLabFile => Path.Combine(DataDir, "config.lab.json");
+    //public static string ConfigFile => Path.Combine(DataDir, "config.json");
+    //public static string ConfigLabFile => Path.Combine(DataDir, "config.lab.json");
     public static string InventoryCacheFile => Path.Combine(DataDir, "inventory_cache.json");
     public static string ServerCacheDir => Path.Combine(CacheDir, "ServerCache");
     public static string VerifyCacheDir => Path.Combine(CacheDir, "VerifyCache");
@@ -220,8 +220,8 @@ public static class AppPaths
         }
 
         string exeDir = AppContext.BaseDirectory;
-        MoveFileIfExists(Path.Combine(exeDir, "config.json"), ConfigFile);
-        MoveFileIfExists(Path.Combine(exeDir, "config.lab.json"), ConfigLabFile);
+        //MoveFileIfExists(Path.Combine(exeDir, "config.json"), ConfigFile);
+        //MoveFileIfExists(Path.Combine(exeDir, "config.lab.json"), ConfigLabFile);
         MoveFileIfExists(Path.Combine(exeDir, "Data", "inventory_cache.json"), InventoryCacheFile);
         MoveFileIfExists(Path.Combine(exeDir, "browser_config.json"), Path.Combine(DataDir, "browser_config.json"));
         MoveFileIfExists(Path.Combine(exeDir, "user.config.json"), Path.Combine(DataDir, "user.config.json"));

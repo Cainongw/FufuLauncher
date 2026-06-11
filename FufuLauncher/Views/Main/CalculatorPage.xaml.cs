@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Numerics;
 using System.Text.Json.Nodes;
+using FufuLauncher.Services;
 using FufuLauncher.ViewModels;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -87,7 +88,15 @@ namespace FufuLauncher.Views
                 ViewModel.IsLoading = false;
             }
         }
-
+        private async Task<string> GetCurrentCookieAsync()
+        {
+            var accountManager = App.GetService<AccountManager>();
+            var activeId = accountManager.ActiveAccountId;
+            if (activeId == null) return null;
+            var cookies = await accountManager.LoadCookiesAsync(activeId);
+            if (cookies == null || cookies.Count == 0) return null;
+            return string.Join("; ", cookies.Select(kv => $"{kv.Key}={kv.Value}"));
+        }
         private async Task LoadCalculatorPageAsync()
         {
             try
@@ -97,39 +106,24 @@ namespace FufuLauncher.Views
                 ViewModel.IsLoading = true;
                 ViewModel.StatusMessage = "正在同步养成数据...";
 
-                var configPath = Helpers.AppPaths.ConfigFile;
-                if (File.Exists(configPath))
+                var cookieStr = await GetCurrentCookieAsync();
+                if (!string.IsNullOrWhiteSpace(cookieStr))
                 {
-                    try
+                    var manager = CalculatorWebView.CoreWebView2.CookieManager;
+                    var cookies = await manager.GetCookiesAsync("https://act.mihoyo.com");
+                    foreach (var c in cookies) manager.DeleteCookie(c);
+
+                    foreach (var item in cookieStr.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                     {
-                        var json = await File.ReadAllTextAsync(configPath);
-                        var node = JsonNode.Parse(json);
-                        var cookieStr = node?["Account"]?["Cookie"]?.ToString() ?? "";
-
-                        if (!string.IsNullOrWhiteSpace(cookieStr))
+                        var kv = item.Split('=', 2);
+                        if (kv.Length == 2)
                         {
-                            var manager = CalculatorWebView.CoreWebView2.CookieManager;
-                            var cookies = await manager.GetCookiesAsync("https://act.mihoyo.com");
-                            foreach (var c in cookies) manager.DeleteCookie(c);
-
-                            foreach (var item in cookieStr.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-                            {
-                                var kv = item.Split('=', 2);
-                                if (kv.Length == 2)
-                                {
-                                    var cookie = manager.CreateCookie(kv[0].Trim(), kv[1].Trim(), ".mihoyo.com", "/");
-                                    manager.AddOrUpdateCookie(cookie);
-                                }
-                            }
-                            Debug.WriteLine($"已注入 {cookieStr.Split(';').Length} 个 cookie");
+                            var cookie = manager.CreateCookie(kv[0].Trim(), kv[1].Trim(), ".mihoyo.com", "/");
+                            manager.AddOrUpdateCookie(cookie);
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine("读取 cookie 失败: " + ex.Message);
-                    }
+                    Debug.WriteLine($"已注入 {cookieStr.Split(';').Length} 个 cookie");
                 }
-
                 StartLoadingTimeout();
                 StartMinDisplayTimer();
 

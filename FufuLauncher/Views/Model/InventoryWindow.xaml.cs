@@ -27,7 +27,7 @@ namespace FufuLauncher.Views
             SetTitleBar(AppTitleBar);
 
             _cachePath = Helpers.AppPaths.InventoryCacheFile;
-            _configPath = Helpers.AppPaths.ConfigFile;
+            //_configPath = Helpers.AppPaths.ConfigFile;
 
             if (_httpClient.DefaultRequestHeaders.UserAgent.Count == 0)
             {

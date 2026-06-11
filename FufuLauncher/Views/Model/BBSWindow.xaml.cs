@@ -23,7 +23,7 @@ namespace FufuLauncher.Views
     public sealed partial class BBSWindow : Window
     {
         private AppWindow m_AppWindow;
-        private string ConfigPath => Helpers.AppPaths.ConfigFile;
+        //private string ConfigPath => Helpers.AppPaths.ConfigFile;
         private static readonly System.Threading.SemaphoreSlim _fetchApiSemaphore = new System.Threading.SemaphoreSlim(1, 1);
         
         private byte[] _screenshotBytes;
@@ -615,21 +615,9 @@ namespace FufuLauncher.Views
         private async Task LoadPageAsync(string url)
         {
             System.Diagnostics.Debug.WriteLine($"[BBSWindow] LoadPageAsync called with URL: {url}");
-            System.Diagnostics.Debug.WriteLine($"[BBSWindow] ConfigPath exists: {File.Exists(ConfigPath)}");
+            //System.Diagnostics.Debug.WriteLine($"[BBSWindow] ConfigPath exists: {File.Exists(ConfigPath)}");
             
-            if (File.Exists(ConfigPath))
-            {
-                try {
-                    var json = await File.ReadAllTextAsync(ConfigPath);
-                    var cfg = JsonSerializer.Deserialize<AppConfig>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                    var cookieStr = cfg?.Account?.Cookie ?? "";
-                    System.Diagnostics.Debug.WriteLine($"[BBSWindow] Cookie length: {cookieStr.Length}");
-                    ParseCookie(cookieStr);
-                    System.Diagnostics.Debug.WriteLine($"[BBSWindow] Parsed {cookieDic.Count} cookies");
-                } catch (Exception ex) { 
-                    System.Diagnostics.Debug.WriteLine($"[BBSWindow] Failed to load config: {ex.Message}");
-                }
-            }
+            
             
             var manager = BBSWebView.CoreWebView2.CookieManager;
             if (BBSWebView.Source == null || BBSWebView.Source.ToString() == "about:blank")

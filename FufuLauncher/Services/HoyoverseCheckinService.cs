@@ -129,4 +129,25 @@ public class HoyoverseCheckinService : IHoyoverseCheckinService
         bool success = !result.Contains("失败") && !result.Contains("异常");
         return (success, result);
     }
+
+    public async Task<CheckinCalendarData?> GetCalendarDataAsync(Dictionary<string, string> cookies, string serverType)
+    {
+        if (serverType == "os")
+        {
+            // 未实现 HoYoLAB 签到日历
+            return null;
+        }
+        //if (serverType == "os")
+        //{
+        //    string cookieStr = string.Join("; ", cookies.Select(kv => $"{kv.Key}={kv.Value}"));
+        //    var os = new HoyolabCheckinService();
+        //    await os.InitializeAsync(cookieStr);
+        //    return await os.GetCheckinCalendarAsync();   
+        //}
+
+        var config = BuildConfigFromCookies(cookies, serverType);
+        var genshin = new Genshin();
+        await genshin.InitializeAsync(config);
+        return await genshin.GetCheckinCalendarAsync();
+    }
 }

@@ -1932,7 +1932,15 @@ private async Task ImportUigfAsync()
         }
         return new ObservableCollection<GachaDisplayItem>(items);
     }
-
+    private async Task<string> GetCurrentCookieAsync()
+    {
+        var accountManager = App.GetService<AccountManager>();
+        var activeId = accountManager.ActiveAccountId;
+        if (activeId == null) return null;
+        var cookies = await accountManager.LoadCookiesAsync(activeId);
+        if (cookies == null || cookies.Count == 0) return null;
+        return string.Join("; ", cookies.Select(kv => $"{kv.Key}={kv.Value}"));
+    }
     public async Task FetchMetadataFromApiAsync()
     {
         IsScraping = true;
@@ -1942,18 +1950,7 @@ private async Task ImportUigfAsync()
         {
             await FetchGachaPoolMetadataAsync();
 
-            string? cookie = null;
-            try
-            {
-                var configPath = Helpers.AppPaths.ConfigFile;
-                if (File.Exists(configPath))
-                {
-                    var configJson = await File.ReadAllTextAsync(configPath);
-                    using var configDoc = JsonDocument.Parse(configJson);
-                    cookie = configDoc.RootElement.GetProperty("Account").TryGetProperty("Cookie", out var c) ? c.GetString() : null;
-                }
-            }
-            catch { }
+            var cookie = await GetCurrentCookieAsync();
 
             var results = new List<ScrapedMetadata>();
 

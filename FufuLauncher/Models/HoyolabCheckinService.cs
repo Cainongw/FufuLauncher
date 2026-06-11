@@ -6,20 +6,18 @@ using System.Text.Json.Serialization;
 
 namespace FufuLauncher.Models
 {
-    // OS 签到奖励
+  
     public class OsRewardItem
     {
         [JsonPropertyName("name")] public string Name { get; set; }
         [JsonPropertyName("cnt")] public int Count { get; set; }
     }
 
-    // OS 签到奖励列表
     public class OsCheckinRewardsData
     {
         [JsonPropertyName("awards")] public List<OsRewardItem> Awards { get; set; }
     }
 
-    // OS 账号信息
     public class OsAccountItem
     {
         [JsonPropertyName("nickname")] public string Nickname { get; set; }
@@ -32,7 +30,7 @@ namespace FufuLauncher.Models
         [JsonPropertyName("list")] public List<OsAccountItem> List { get; set; }
     }
 
-    // OS 签到状态
+   
     public class OsIsSignData
     {
         [JsonPropertyName("total_sign_day")] public int TotalSignDay { get; set; }
@@ -41,7 +39,7 @@ namespace FufuLauncher.Models
         [JsonPropertyName("first_bind")] public bool FirstBind { get; set; }
     }
 
-    // OS 通用 API 响应包装
+
     public class OsApiResponse<T>
     {
         [JsonPropertyName("retcode")] public int RetCode { get; set; }
@@ -49,7 +47,7 @@ namespace FufuLauncher.Models
         [JsonPropertyName("data")] public T Data { get; set; }
     }
 
-    // OS 签到响应
+    
     public class OsSignResponseData
     {
         [JsonPropertyName("code")] public string Code { get; set; }
@@ -58,7 +56,7 @@ namespace FufuLauncher.Models
 
     public class HoyolabCheckinService
     {
-        // 可配置项
+      
         public string BaseApi { get; set; } = "https://sg-hk4e-api.hoyolab.com";
         public string ActId { get; set; } = "e202102251931481";
         public string GameBiz { get; set; } = "hk4e_global";
@@ -84,7 +82,7 @@ namespace FufuLauncher.Models
             _httpClient.Timeout = TimeSpan.FromSeconds(30);
         }
 
-        // 构建请求头
+       
         private void SetHeaders(string cookie)
         {
             var deviceId = Guid.NewGuid().ToString("N");
@@ -179,7 +177,7 @@ namespace FufuLauncher.Models
             }
         }
 
-        // 初始化：获取账号列表 + 奖励列表
+   
         public async Task InitializeAsync(string cookie)
         {
             LastApiError = string.Empty;
@@ -261,7 +259,7 @@ namespace FufuLauncher.Models
             return null;
         }
 
-        // 执行签到请求
+      
         private async Task<HttpResponseMessage> DoSignAsync(OsAccountItem account)
         {
             var headers = new Dictionary<string, string>(_headers);
@@ -279,7 +277,7 @@ namespace FufuLauncher.Models
 
                     req.Content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
 
-                    // 覆盖 DS（POST 需要带 body 的 DS）
+                   
                     req.Headers.Remove("DS");
                     req.Headers.Add("DS", GenerateDs2(body: jsonBody));
 
@@ -296,7 +294,7 @@ namespace FufuLauncher.Models
             return null;
         }
 
-        // 主签到逻辑
+   
         public async Task<string> SignAccountAsync(string cookie, HashSet<string> disabledUids = null)
         {
             LastApiError = string.Empty;
