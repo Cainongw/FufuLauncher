@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using FufuLauncher.Contracts.Services;
 using FufuLauncher.Models;
 using Microsoft.Extensions.DependencyInjection;
@@ -58,6 +58,22 @@ public class AccountManager
             _accountList = new AccountList();
         }
 
+        var normalizedAccounts = _accountList.Accounts
+            .Where(a => !string.IsNullOrWhiteSpace(a?.Id))
+            .GroupBy(a => a.Id)
+            .Select(g => g.Last())
+            .ToList();
+
+        if (normalizedAccounts.Count != _accountList.Accounts.Count)
+        {
+            _accountList.Accounts = normalizedAccounts;
+            await SaveAccountListAsync();
+        }
+        else
+        {
+            _accountList.Accounts = normalizedAccounts;
+        }
+
         var settings = App.GetService<ILocalSettingsService>();
         try
         {
@@ -98,8 +114,18 @@ public class AccountManager
             string stuid = ExtractStuid(cookies, serverType);
             string id = $"{serverType}_{stuid}";
 
-            if (_accountList.Accounts.Any(a => a.Id == id))
-                throw new InvalidOperationException("该账户已存在");
+            var existingEntry = _accountList.Accounts.FirstOrDefault(a => a.Id == id);
+            if (existingEntry != null)
+            {
+                string existingCookiePath = Path.Combine(_cookiesDir, existingEntry.CookieFilePath);
+                var existingCookiesJson = JsonSerializer.Serialize(cookies);
+                await File.WriteAllTextAsync(existingCookiePath, existingCookiesJson);
+                existingEntry.LastLoginTime = DateTime.Now;
+                if (!string.IsNullOrWhiteSpace(nickname))
+                    existingEntry.Nickname = nickname;
+                await SaveAccountListAsync();
+                return existingEntry;
+            }
 
             string cookieFileName = $"{id}.json";
             string cookiePath = Path.Combine(_cookiesDir, cookieFileName);
