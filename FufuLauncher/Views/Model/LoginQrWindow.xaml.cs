@@ -1,24 +1,17 @@
 using System.Diagnostics;
-using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization.Metadata;
-using System.Threading;
-using System.Threading.Tasks;
-using CommunityToolkit.Mvvm.Messaging;
 using FufuLauncher.Constants;
-using FufuLauncher.Contracts.Services;
-using FufuLauncher.Messages;
 using FufuLauncher.Services;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.Web.WebView2.Core;
-using MihoyoBBS; 
 using QRCoder;  
  
 namespace FufuLauncher.Views;
@@ -73,6 +66,7 @@ public sealed partial class LoginQrWindow : Window
     private TaskCompletionSource<(Dictionary<string, string> Cookies, string ServerType)>? _loginTcs;
     private ContentDialog _statusDialog;
     private bool _isDialogOpen;
+    private bool _isLoginCompleting;
 
     public bool IsLoginSuccessful
     {
@@ -464,6 +458,11 @@ public sealed partial class LoginQrWindow : Window
 
     private void OnLoginSuccess(Dictionary<string, string> cookies, string serverType)
     {
+        _isLoginCompleting = true;
+        IsLoginSuccessful = true;
+        _currentSession?.Cancel();
+        UpdateStatus("", false, true);
+
         if (_loginTcs == null)
             return;
 
@@ -489,6 +488,7 @@ public sealed partial class LoginQrWindow : Window
     #region 米游社APP扫码登录（重构为基于会话对象）
     private async Task StartAppLoginFlowAsync(LoginSession session)
     {
+        _isLoginCompleting = false;
         UpdateStatus("正在创建APP登录二维码...", true);
 
         var qrResult = await CreateAppQrCodeAsync(session);
@@ -566,7 +566,8 @@ public sealed partial class LoginQrWindow : Window
 
                 if (retcode == -3501 || retcode == -106)
                 {
-                    UpdateStatus("二维码已失效或过期", false);
+                    if (!_isLoginCompleting)
+                        UpdateStatus("二维码已失效或过期", false);
                     return;
                 }
 
@@ -575,6 +576,7 @@ public sealed partial class LoginQrWindow : Window
                     string status = result["data"]["status"]?.GetValue<string>();
                     if (status?.ToLower() == "confirmed")
                     {
+                        _isLoginCompleting = true;
                         UpdateStatus("APP扫码成功，正在换取...", true);
                         confirmedData = result["data"];
                         break;
@@ -632,6 +634,7 @@ public sealed partial class LoginQrWindow : Window
     #region 游戏扫码登录（重构为基于会话对象）
     private async Task StartGameLoginFlowAsync(LoginSession session)
     {
+        _isLoginCompleting = false;
         UpdateStatus("正在创建游戏扫码二维码...", true);
 
         var qrResult = await CreateGameQrCodeAsync(session);
@@ -722,6 +725,7 @@ public sealed partial class LoginQrWindow : Window
                     string stat = result["data"]["stat"]?.GetValue<string>();
                     if (stat == "Confirmed")
                     {
+                        _isLoginCompleting = true;
                         UpdateStatus("扫码成功，正在换取SToken...", true);
                         string raw = result["data"]["payload"]?["raw"]?.GetValue<string>();
                         if (!string.IsNullOrEmpty(raw))

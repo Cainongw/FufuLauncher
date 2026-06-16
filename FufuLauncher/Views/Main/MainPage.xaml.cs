@@ -104,6 +104,29 @@ public sealed partial class MainPage : Page
             }
         }
         
+        private void LaunchButton_PointerEntered(object sender, PointerRoutedEventArgs e)
+        {
+            AnimateLaunchButtonHoverOpacity(1.0);
+        }
+
+        private void LaunchButton_PointerExited(object sender, PointerRoutedEventArgs e)
+        {
+            AnimateLaunchButtonHoverOpacity(0.0);
+        }
+
+        private void AnimateLaunchButtonHoverOpacity(double targetOpacity)
+        {
+            if (LaunchButtonHoverLayer == null) return;
+
+            var storyboard = new Storyboard();
+            var duration = new Duration(TimeSpan.FromMilliseconds(200));
+            var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
+
+            storyboard.Children.Add(CreateDoubleAnimation(LaunchButtonHoverLayer, "Opacity", targetOpacity, duration, easing));
+
+            storyboard.Begin();
+        }
+        
         private async void AnnouncementBell_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -443,7 +466,7 @@ private void OnOpenGachaAnalysisClick(object sender, RoutedEventArgs e)
     private void AnimateInfoCardToggle(bool isExpanded)
     {
         _isInfoCardExpanded = isExpanded;
-        var targetHeight = isExpanded ? 275 : 157;
+        var targetHeight = isExpanded ? ViewModel.InfoCardHeight : 157;
         var targetCornerRadius = new CornerRadius(12);
 
         var sb = new Storyboard();

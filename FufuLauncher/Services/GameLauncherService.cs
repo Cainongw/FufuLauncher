@@ -152,7 +152,10 @@ namespace FufuLauncher.Services
         {
             int timeoutMs = 60000;
             int elapsedMs = 0;
-            int delayMs = 500;
+            int delayMs = 1000;
+
+            var exeNames = await GameExeManager.GetExeNamesAsync();
+            var processNames = exeNames.Select(Path.GetFileNameWithoutExtension).ToList();
 
             while (elapsedMs < timeoutMs)
             {
@@ -162,8 +165,7 @@ namespace FufuLauncher.Services
                 var processes = Process.GetProcesses();
                 foreach (var process in processes)
                 {
-                    if (process.ProcessName.Equals("GenshinImpact", StringComparison.OrdinalIgnoreCase) ||
-                        process.ProcessName.Equals("YuanShen", StringComparison.OrdinalIgnoreCase))
+                    if (processNames.Any(name => process.ProcessName.Equals(name, StringComparison.OrdinalIgnoreCase)))
                     {
                         await Task.Delay(2000);
                         return process.Id;
@@ -171,7 +173,7 @@ namespace FufuLauncher.Services
                 }
             }
     
-            Trace.WriteLine("[启动流程] 警告：等待游戏主程序超时 (60秒)");
+            Trace.WriteLine("[启动流程] 警告：等待游戏主程序超时 (1分钟)");
             return 0;
         }
 
@@ -326,12 +328,20 @@ public async Task<LaunchResult> LaunchGameAsync()
                 {
                     logBuilder.AppendLine("[启动流程] 游戏进程已启动，正在捕获目标PID...");
                     int gamePid = await WaitGenshinStartAsync();
-                    _ = LaunchBetterGIAsync();
 
-                    await CheckAndLaunchFpsOverlayAsync(logBuilder, gamePid);
+                    if (gamePid > 0)
+                    {
+                        _ = LaunchBetterGIAsync();
+                        await CheckAndLaunchFpsOverlayAsync(logBuilder, gamePid);
 
-                    result.Success = true;
-                    result.ErrorMessage = "";
+                        result.Success = true;
+                        result.ErrorMessage = "";
+                    }
+                    else
+                    {
+                        result.Success = false;
+                        result.ErrorMessage = "启动超时，请重新启动";
+                    }
                 }
 
                 result.DetailLog = logBuilder.ToString();
