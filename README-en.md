@@ -38,3 +38,11 @@
 * This project is for learning and exchange purposes only. Please support the official game.
 
 [![Star History Chart](https://api.star-history.com/svg?repos=CodeCubist/FufuLauncher&type=date&legend=top-left)](https://www.star-history.com/#CodeCubist/FufuLauncher&type=date&legend=top-left)
+
+### [<img src="https://avatars.githubusercontent.com/u/34448643" alt="SignPath" width="48" /> Code signing provided by SignPath](https://signpath.org)
+
+Free code signing is provided by [SignPath.io](https://about.signpath.io), with certificates provided by [SignPath Foundation](https://signpath.org).
+
+**Contributors and Reviewers**
+
+<a href="https://github.com/FufuLauncher/FufuLauncher/graphs/contributors"><img src="https://contrib.rocks/image?repo=FufuLauncher/FufuLauncher" /></a>
