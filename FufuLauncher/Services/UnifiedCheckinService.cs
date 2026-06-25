@@ -111,6 +111,7 @@ public class UnifiedCheckinService : IUnifiedCheckinService
         
         if (gameEnabled)
         {
+            var gameSw = Stopwatch.StartNew();
             result.GameResult.Executed = true;
             try
             {
@@ -179,7 +180,8 @@ public class UnifiedCheckinService : IUnifiedCheckinService
                             Items = { ("游戏签到", false, ex.Message) }
                         });
                     }
-                    await Task.Delay(new Random().Next(2000, 5000));
+                    if (activeAccounts.Count > 1)
+                        await Task.Delay(new Random().Next(2000, 5000));
                 }
 
                 result.GameResult.Success = result.GameResult.FailCount == 0;
@@ -199,11 +201,14 @@ public class UnifiedCheckinService : IUnifiedCheckinService
                 result.GameResult.Message = $"异常: {ex.Message}";
                 Debug.WriteLine($"[统一签到] 游戏签到异常: {ex.Message}");
             }
+            gameSw.Stop();
+            Debug.WriteLine($"[统一签到] 游戏签到耗时 {gameSw.ElapsedMilliseconds}ms");
         }
 
         // ===================== 社区签到 =====================
         if (communityEnabled)
         {
+            var communitySw = Stopwatch.StartNew();
             result.CommunityResult.Executed = true;
             try
             {
@@ -245,7 +250,8 @@ public class UnifiedCheckinService : IUnifiedCheckinService
                             Items = { ("社区签到", success, success ? "完成" : "失败") }
                         });
 
-                    await Task.Delay(new Random().Next(2000, 5000));
+                    if (activeAccounts.Count > 1)
+                        await Task.Delay(new Random().Next(2000, 5000));
                 }
 
                 result.CommunityResult.Success = result.CommunityResult.FailCount == 0;
@@ -262,11 +268,14 @@ public class UnifiedCheckinService : IUnifiedCheckinService
                 result.CommunityResult.Message = $"异常: {ex.Message}";
                 Debug.WriteLine($"[统一签到] 社区签到异常: {ex.Message}");
             }
+            communitySw.Stop();
+            Debug.WriteLine($"[统一签到] 社区签到耗时 {communitySw.ElapsedMilliseconds}ms");
         }
 
         // ===================== 云游戏签到 =====================
         if (cloudGameEnabled)
         {
+            var cloudSw = Stopwatch.StartNew();
             result.CloudGameResult.Executed = true;
             try
             {
@@ -311,7 +320,8 @@ public class UnifiedCheckinService : IUnifiedCheckinService
                                 Items = { ("云游戏签到", success, success ? "完成" : "失败") }
                             });
 
-                        await Task.Delay(new Random().Next(2000, 5000));
+                        if (activeAccounts.Count > 1)
+                            await Task.Delay(new Random().Next(2000, 5000));
                     }
 
                     result.CloudGameResult.Success = result.CloudGameResult.FailCount == 0;
@@ -327,6 +337,8 @@ public class UnifiedCheckinService : IUnifiedCheckinService
                 result.CloudGameResult.Message = $"异常: {ex.Message}";
                 Debug.WriteLine($"[统一签到] 云原神签到异常: {ex.Message}");
             }
+            cloudSw.Stop();
+            Debug.WriteLine($"[统一签到] 云游戏签到耗时 {cloudSw.ElapsedMilliseconds}ms");
         }
 
         int successAccounts = result.AccountResults.Count(a => a.Items.Any(i => i.Success == true));
